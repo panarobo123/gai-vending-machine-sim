@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ペットボトル水やり器シミュレータ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+    background: #1c2430;
+    color: #e8ecf1;
+    padding: 12px;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #9fb0c3; margin-bottom: 10px; }
+  .layout { display: flex; flex-wrap: wrap; gap: 12px; }
+  .view-panel { flex: 1 1 460px; min-width: 320px; }
+  .side-panel { flex: 1 1 300px; min-width: 280px; max-width: 420px; }
+  canvas.main { width: 100%; background: #0e1420; border-radius: 8px; display: block; }
+  .card {
+    background: #263242; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+  }
+  .card h2 { font-size: 13px; color: #8fc7ff; margin-bottom: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .row label { flex: 0 0 9em; }
+  .row input[type=range] { flex: 1; }
+  .row .val { flex: 0 0 5.5em; text-align: right; color: #ffd479; font-variant-numeric: tabular-nums; }
+  select, button {
+    background: #34455c; color: #e8ecf1; border: 1px solid #4a5f7c;
+    border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  button:hover { background: #40557a; }
+  button.primary { background: #2f6fb2; border-color: #4a8fd4; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
+  .stat { background: #1d2735; border-radius: 6px; padding: 6px 8px; }
+  .stat .k { color: #9fb0c3; font-size: 10px; }
+  .stat .v { font-size: 15px; color: #ffd479; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 10px; color: #c2cbd6; }
+  .chart-label { font-size: 11px; color: #9fb0c3; margin: 6px 0 2px; }
+  canvas.chart { width: 100%; height: 60px; background: #1d2735; border-radius: 6px; display: block; }
+  .state-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: bold;
+  }
+  .flowing { background: #1d6fd4; }
+  .stopped { background: #555f6d; }
+  .airin  { background: #b26f2f; }
+  .note { font-size: 11px; color: #9fb0c3; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>🌱 1L耐圧ペットボトル水やり器シミュレータ</h1>
+<div class="subtitle">
+  底面の小さな吐出口＋土の乾湿による自動調整（負圧式）── 土が乾くと水が出て、湿ると止まる仕組みを再現
+</div>
+
+<div class="layout">
+  <div class="view-panel">
+    <canvas id="view" class="main" width="640" height="560"></canvas>
+  </div>
+
+  <div class="side-panel">
+    <div class="card">
+      <h2>■ 状態</h2>
+      <div class="row" style="margin-bottom:6px;">
+        <span>動作状態：</span><span id="stateBadge" class="state-badge stopped">停止（水封）</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">残り水量</div><div class="v" id="stWater">-- <small>mL</small></div></div>
+        <div class="stat"><div class="k">吐出口付近の土壌水分</div><div class="v" id="stMoist">-- <small>%</small></div></div>
+        <div class="stat"><div class="k">流出速度</div><div class="v" id="stFlow">-- <small>mL/h</small></div></div>
+        <div class="stat"><div class="k">ボトル内圧（ゲージ）</div><div class="v" id="stPress">-- <small>kPa</small></div></div>
+        <div class="stat"><div class="k">経過時間</div><div class="v" id="stTime">--</div></div>
+        <div class="stat"><div class="k">空になるまで（推定）</div><div class="v" id="stDays">--</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>■ ボトル・吐出口の設定</h2>
+      <div class="row">
+        <label>吐出口の数</label>
+        <input type="range" id="holeCount" min="1" max="7" step="1" value="3">
+        <span class="val" id="holeCountVal">3 個</span>
+      </div>
+      <div class="row">
+        <label>吐出口の直径</label>
+        <input type="range" id="holeDia" min="0.5" max="2.0" step="0.1" value="1.0">
+        <span class="val" id="holeDiaVal">1.0 mm</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>■ 環境の設定</h2>
+      <div class="row">
+        <label>天候（蒸発散量）</label>
+        <select id="weather">
+          <option value="0.4">曇り・涼しい</option>
+          <option value="1.0" selected>晴れ</option>
+          <option value="1.8">真夏の晴天</option>
+          <option value="rain">雨</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>土の種類</label>
+        <select id="soilType">
+          <option value="sand">砂質土（乾きやすい）</option>
+          <option value="loam" selected>壌土（標準）</option>
+          <option value="clay">粘土質（乾きにくい）</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>シミュレーション速度</label>
+        <select id="speed">
+          <option value="60">×60（1秒＝1分）</option>
+          <option value="600" selected>×600（1秒＝10分）</option>
+          <option value="1800">×1800（1秒＝30分）</option>
+          <option value="3600">×3600（1秒＝1時間）</option>
+        </select>
+      </div>
+      <div class="btns">
+        <button id="btnPause" class="primary">⏸ 一時停止</button>
+        <button id="btnRefill">🚰 ボトル補充</button>
+        <button id="btnReset">↺ リセット</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>■ 推移グラフ（過去3日分）</h2>
+      <div class="chart-label">残り水量 [mL]</div>
+      <canvas id="chartWater" class="chart" width="380" height="60"></canvas>
+      <div class="chart-label">吐出口付近の土壌水分 [%]</div>
+      <canvas id="chartMoist" class="chart" width="380" height="60"></canvas>
+      <div class="chart-label">流出速度 [mL/h]</div>
+      <canvas id="chartFlow" class="chart" width="380" height="60"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>■ 仕組み（モデルの説明）</h2>
+      <div class="note">
+        ボトルは密閉されており、水が流出するとボトル上部の空気層が膨張して<b>負圧</b>になり、やがて流出が止まります。
+        吐出口の周りの土が湿っている間は、土の吸引力（マトリックポテンシャル）が小さく、
+        水膜が穴を塞いで空気も入れないため、流出は止まったままです。<br>
+        植物の吸水や蒸発で土が乾くと、①土の吸引力が増して水を引き出し、
+        ②乾いた土の隙間から空気が穴に入って負圧が解除され、再び水が流出します。
+        土が十分湿ると再び止まる──この繰り返しで水やりが自動調整されます。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------------- 物理モデル ---------------- */
+
+const P_ATM = 101.325;      // kPa
+const RHO_G = 9.8;          // kPa/m（水柱換算 ρg）
+
+// 土の種類ごとのパラメータ
+const SOILS = {
+  sand: { D: 0.010, suctionMax: 3.0,  sealWet: 3.5, sealDry: 0.15, drain: 1.6, name: "砂質土" },
+  loam: { D: 0.004, suctionMax: 6.0,  sealWet: 4.5, sealDry: 0.30, drain: 1.0, name: "壌土" },
+  clay: { D: 0.0015, suctionMax: 9.0, sealWet: 6.0, sealDry: 0.60, drain: 0.5, name: "粘土質" },
+};
+
+const BOTTLE = {
+  volume: 1000,      // mL
+  areaCm2: 50,       // 断面積 cm^2 → 満水で高さ20cm
+  widthCells: 10,    // 土グリッド上での底面幅（セル数）
+};
+
+// 土グリッド（1セル = 1cm × 1cm、奥行き10cmの体積として扱う）
+const NX = 48, NY = 20;
+const CELL_VOL = 10;       // mL（1×1×10cm）
+const POROSITY = 0.40;     // 飽和時に保持できる水の割合
+
+const sim = {
+  t: 0,                    // 経過秒
+  running: true,
+  water: 950,              // ボトル内水量 mL
+  airK: 0,                 // ヘッドスペースの空気量（P×V 一定則の定数, kPa·mL）
+  theta: null,             // 土壌水分グリッド（0〜1 正規化）
+  holes: [],               // 吐出口 {gx: グリッドx位置}
+  flowRate: 0,             // 現在の流出速度 mL/h
+  airFlux: 0,              // 空気侵入の強さ（演出用）
+  history: [],             // {t, water, moist, flow}
+  drops: [],               // 演出用パーティクル
+  bubbles: [],
+};
+
+const params = {
+  holeCount: 3,
+  holeDia: 1.0,
+  weatherFactor: 1.0,
+  rain: false,
+  soil: SOILS.loam,
+  speed: 600,
+};
+
+function headHeightM() { return sim.water / BOTTLE.areaCm2 / 100; } // 水位 m
+
+function headPressure() { // ヘッドスペース絶対圧 kPa
+  const vHead = Math.max(BOTTLE.volume - sim.water, 5);
+  return sim.airK / vHead;
+}
+
+function holePositions(n) {
+  // ボトル底面の幅の中に均等配置
+  const x0 = (NX - BOTTLE.widthCells) / 2;
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    pos.push({ gx: Math.round(x0 + (i + 0.5) * BOTTLE.widthCells / n) });
+  }
+  return pos;
+}
+
+function moistureAtHole(h) {
+  // 吐出口直下とその周囲の平均
+  let s = 0, c = 0;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = 0; dy <= 1; dy++) {
+      const x = h.gx + dx, y = dy;
+      if (x >= 0 && x < NX && y < NY) { s += sim.theta[y * NX + x]; c++; }
+    }
+  }
+  return s / c;
+}
+
+function suction(th) { // 土の吸引圧 kPa（乾くほど大）
+  return params.soil.suctionMax * Math.pow(1 - th, 2);
+}
+
+function sealPressure(th) { // 空気侵入に必要な圧力差 kPa（湿るほど大＝水封）
+  return params.soil.sealDry + (params.soil.sealWet - params.soil.sealDry) * th;
+}
+
+function resetSoil(initialTheta) {
+  sim.theta = new Float32Array(NX * NY).fill(initialTheta);
+}
+
+function reset() {
+  sim.t = 0;
+  sim.water = 950;
+  const vHead = BOTTLE.volume - sim.water;
+  sim.airK = P_ATM * vHead;      // 密閉した瞬間は大気圧
+  resetSoil(0.55);
+  sim.holes = holePositions(params.holeCount);
+  sim.history = [];
+  sim.drops = [];
+  sim.bubbles = [];
+  sim.flowRate = 0;
+  lastRecord = -1e9;
+}
+
+function refill() {
+  sim.water = 950;
+  sim.airK = P_ATM * (BOTTLE.volume - sim.water);
+}
+
+/* 1ステップ（dt秒）進める */
+function step(dt) {
+  const soil = params.soil;
+  const nHoles = sim.holes.length;
+  const holeAreaFactor = Math.pow(params.holeDia / 1.0, 2);
+
+  // --- ボトルからの流出と空気侵入 ---
+  const pHead = headPressure();
+  const pBottom = pHead + RHO_G * headHeightM(); // 穴の内側の絶対圧
+  let totalOut = 0;
+  let airIn = 0;
+
+  for (const h of sim.holes) {
+    const th = moistureAtHole(h);
+
+    // 水の流出：内圧 + 土の吸引 − 大気圧 が正なら流出
+    // 土が飽和に近いと浸透が律速になり流量が落ちる
+    if (sim.water > 0) {
+      const dP = pBottom - P_ATM + suction(th);
+      if (dP > 0) {
+        const infil = 0.15 + 0.85 * Math.pow(Math.max(0, 1 - th), 1.5);
+        // 係数: 1kPa 差・φ1mm・壌土で ≒ 2.2mL/h
+        const q = 2.2 / 3600 * holeAreaFactor * soil.drain * infil * dP; // mL/s
+        const out = Math.min(q * dt, sim.water);
+        totalOut += out;
+        // 直下のセルへ給水
+        const idx = 0 * NX + h.gx;
+        sim.theta[idx] = Math.min(1, sim.theta[idx] + out / (CELL_VOL * POROSITY));
+        h.flow = out / dt; // 演出用
+      } else {
+        h.flow = 0;
+      }
+    }
+
+    // 空気侵入：負圧が水封圧を超えると気泡が入る
+    const vac = P_ATM - pBottom;
+    const seal = sealPressure(th);
+    if (vac > seal && sim.water > 0) {
+      // kPa·mL/s : 侵入した空気は大気圧相当としてヘッドスペースに加算
+      const rate = 6.0 * holeAreaFactor * (vac - seal); // kPa·mL/s
+      airIn += rate * dt;
+      h.bubbling = true;
+    } else {
+      h.bubbling = false;
+    }
+  }
+
+  sim.water -= totalOut;
+  sim.airK += airIn;
+  sim.flowRate = sim.flowRate * 0.98 + (totalOut / dt * 3600) * 0.02; // mL/h（平滑化）
+  sim.airFlux = airIn / dt;
+
+  // --- 土壌の水分移動（拡散 + 重力排水） ---
+  const th0 = sim.theta;
+  const D = soil.D; // セル単位の拡散係数（1/s 相当）
+  const g = soil.D * 0.35; // 下向き移流
+  const next = scratch;
+  for (let y = 0; y < NY; y++) {
+    for (let x = 0; x < NX; x++) {
+      const i = y * NX + x;
+      const c = th0[i];
+      const l = x > 0 ? th0[i - 1] : c;
+      const r = x < NX - 1 ? th0[i + 1] : c;
+      const u = y > 0 ? th0[i - NX] : c;
+      const d = y < NY - 1 ? th0[i + NX] : c * 0.995; // 最下段はわずかに排水
+      let v = c + D * dt * (l + r + u + d - 4 * c);
+      // 重力：上のセルから下のセルへ（湿っているほど流れる）
+      if (y > 0) v += g * dt * Math.max(0, u - 0.3) * u;
+      if (y < NY - 1) v -= g * dt * Math.max(0, c - 0.3) * c;
+      next[i] = v;
+    }
+  }
+
+  // --- 蒸発（地表）と植物の吸水（根域） ---
+  const et = params.rain ? 0 : params.weatherFactor;
+  // 地表蒸発: 標準で全幅合計 ≒ 60mL/日
+  const evapPerCell = 60 / NX / 86400 / (CELL_VOL * POROSITY); // (θ/s)
+  for (let x = 0; x < NX; x++) {
+    const i = x;
+    next[i] = Math.max(0, next[i] - evapPerCell * et * dt * Math.pow(next[i], 0.7) * 3);
+  }
+  // 根域の吸水: 標準で合計 ≒ 180mL/日（ボトル下の根域に集中）
+  const rx0 = NX / 2 - 10, rx1 = NX / 2 + 10;
+  let rootCells = 0;
+  for (let y = 1; y < 12; y++) for (let x = rx0; x < rx1; x++) rootCells++;
+  const uptakePerCell = 180 / rootCells / 86400 / (CELL_VOL * POROSITY);
+  for (let y = 1; y < 12; y++) {
+    for (let x = rx0; x < rx1; x++) {
+      const i = y * NX + x;
+      const f = Math.min(1, Math.max(0, (next[i] - 0.08) / 0.25)); // 乾くと吸えない
+      next[i] = Math.max(0, next[i] - uptakePerCell * et * f * dt);
+    }
+  }
+
+  // --- 雨 ---
+  if (params.rain) {
+    const rainPerCell = 600 / NX / 86400 / (CELL_VOL * POROSITY); // 全幅600mL/日
+    for (let x = 0; x < NX; x++) next[x] = Math.min(1, next[x] + rainPerCell * dt);
+  }
+
+  sim.theta.set(next);
+  sim.t += dt;
+}
+
+const scratch = new Float32Array(NX * NY);
+
+/* ---------------- 記録 ---------------- */
+let lastRecord = -1e9;
+function record() {
+  if (sim.t - lastRecord < 120) return; // 2分ごと
+  lastRecord = sim.t;
+  let m = 0;
+  for (const h of sim.holes) m += moistureAtHole(h);
+  m /= sim.holes.length;
+  sim.history.push({ t: sim.t, water: sim.water, moist: m * 100, flow: sim.flowRate });
+  const keep = 3 * 86400;
+  while (sim.history.length > 0 && sim.t - sim.history[0].t > keep) sim.history.shift();
+}
+
+/* ---------------- 描画 ---------------- */
+const cv = document.getElementById("view");
+const cx = cv.getContext("2d");
+
+// レイアウト定数（キャンバス座標）
+const SOIL_TOP = 300;
+const CELL_PX = cv.width / NX; // 13.33px
+const BOTTLE_W = BOTTLE.widthCells * CELL_PX;
+const BOTTLE_X = (cv.width - BOTTLE_W) / 2;
+const BOTTLE_H = 210;
+const BOTTLE_Y = SOIL_TOP - BOTTLE_H - 8;
+
+function soilColor(th) {
+  // 乾: 明るい茶 → 湿: 青みがかった焦げ茶
+  const r = Math.round(158 - 110 * th);
+  const g = Math.round(116 - 76 * th);
+  const b = Math.round(62 + 34 * th);
+  return `rgb(${r},${g},${b})`;
+}
+
+function draw() {
+  cx.clearRect(0, 0, cv.width, cv.height);
+
+  // 空
+  const skyGrad = cx.createLinearGradient(0, 0, 0, SOIL_TOP);
+  if (params.rain) { skyGrad.addColorStop(0, "#3a4658"); skyGrad.addColorStop(1, "#4a5668"); }
+  else if (params.weatherFactor > 1.4) { skyGrad.addColorStop(0, "#2a5f9e"); skyGrad.addColorStop(1, "#7fb0d8"); }
+  else if (params.weatherFactor >= 0.9) { skyGrad.addColorStop(0, "#33608f"); skyGrad.addColorStop(1, "#89aac8"); }
+  else { skyGrad.addColorStop(0, "#4c5a6b"); skyGrad.addColorStop(1, "#8a97a6"); }
+  cx.fillStyle = skyGrad;
+  cx.fillRect(0, 0, cv.width, SOIL_TOP);
+
+  // 太陽 / 雲 / 雨
+  if (!params.rain) {
+    cx.fillStyle = params.weatherFactor > 1.4 ? "#ffd23f" : params.weatherFactor >= 0.9 ? "#ffe28a" : "#c0c8d0";
+    cx.beginPath(); cx.arc(70, 60, params.weatherFactor > 1.4 ? 34 : 26, 0, Math.PI * 2); cx.fill();
+    if (params.weatherFactor < 0.9) { drawCloud(90, 70, 1.2); drawCloud(180, 50, 0.9); }
+  } else {
+    drawCloud(90, 55, 1.4); drawCloud(200, 45, 1.1);
+    cx.strokeStyle = "rgba(160,190,230,0.7)"; cx.lineWidth = 1.5;
+    for (let i = 0; i < 30; i++) {
+      const rx = (i * 137 + (sim.t * 50) % 97) % cv.width;
+      const ry = (i * 61 + sim.t * 220) % SOIL_TOP;
+      cx.beginPath(); cx.moveTo(rx, ry); cx.lineTo(rx - 3, ry + 12); cx.stroke();
+    }
+  }
+
+  // 土
+  for (let y = 0; y < NY; y++) {
+    for (let x = 0; x < NX; x++) {
+      cx.fillStyle = soilColor(sim.theta[y * NX + x]);
+      cx.fillRect(x * CELL_PX, SOIL_TOP + y * CELL_PX, CELL_PX + 0.5, CELL_PX + 0.5);
+    }
+  }
+
+  // 植物（根域の左右に2株）
+  drawPlant(BOTTLE_X - 46, SOIL_TOP);
+  drawPlant(BOTTLE_X + BOTTLE_W + 46, SOIL_TOP);
+
+  // ボトル
+  drawBottle();
+
+  // パーティクル更新・描画
+  updateParticles();
+
+  // 凡例
+  drawLegend();
+}
+
+function drawCloud(x, y, s) {
+  cx.fillStyle = "rgba(225,230,238,0.9)";
+  cx.beginPath();
+  cx.arc(x, y, 18 * s, 0, Math.PI * 2);
+  cx.arc(x + 20 * s, y - 6 * s, 14 * s, 0, Math.PI * 2);
+  cx.arc(x + 38 * s, y + 2 * s, 16 * s, 0, Math.PI * 2);
+  cx.arc(x + 18 * s, y + 8 * s, 15 * s, 0, Math.PI * 2);
+  cx.fill();
+}
+
+function drawPlant(x, groundY) {
+  // 根域の平均水分で葉の色と張りが変わる
+  let m = 0, c = 0;
+  for (let y = 1; y < 10; y++) for (let gx = NX/2 - 10; gx < NX/2 + 10; gx++) { m += sim.theta[y * NX + gx]; c++; }
+  m /= c;
+  const vigor = Math.min(1, Math.max(0.15, (m - 0.05) / 0.4));
+  const droop = (1 - vigor) * 18;
+  cx.strokeStyle = `rgb(${60 + (1-vigor)*80},${130 + vigor*60},60)`;
+  cx.lineWidth = 3;
+  cx.beginPath(); cx.moveTo(x, groundY); cx.quadraticCurveTo(x, groundY - 40, x + droop * 0.3, groundY - 55 + droop * 0.4); cx.stroke();
+  cx.lineWidth = 2;
+  for (const [dx, len] of [[-1, 26], [1, 28], [-1, 18], [1, 16]]) {
+    const by = groundY - 18 - Math.random() * 0 - (len > 20 ? 22 : 8);
+    cx.beginPath();
+    cx.moveTo(x, by);
+    cx.quadraticCurveTo(x + dx * len * 0.7, by - 12 + droop * 0.5, x + dx * len, by - 4 + droop);
+    cx.stroke();
+  }
+}
+
+function drawBottle() {
+  const x = BOTTLE_X, y = BOTTLE_Y, w = BOTTLE_W, h = BOTTLE_H;
+  const vWater = sim.water;
+  const waterH = (vWater / BOTTLE.volume) * (h - 24);
+
+  // 底（下）は台座部、上はキャップ（逆さ想定：口を上に描くシンプル形状）
+  cx.fillStyle = "rgba(190,215,235,0.16)";
+  cx.strokeStyle = "rgba(210,230,250,0.75)";
+  cx.lineWidth = 2;
+  roundRect(x, y, w, h, 8);
+  cx.fill(); cx.stroke();
+
+  // キャップ（上）
+  cx.fillStyle = "#e8604c";
+  cx.fillRect(x + w / 2 - 14, y - 12, 28, 12);
+
+  // 水
+  cx.fillStyle = "rgba(60,140,230,0.75)";
+  cx.fillRect(x + 3, y + h - 4 - waterH, w - 6, waterH);
+
+  // ヘッドスペース圧の表示
+  const gauge = headPressure() - P_ATM;
+  cx.fillStyle = "#dbe6f2";
+  cx.font = "11px sans-serif";
+  cx.textAlign = "center";
+  cx.fillText(`内圧 ${gauge.toFixed(2)} kPa`, x + w / 2, y + 16);
+  cx.fillText(`${Math.round(sim.water)} mL`, x + w / 2, y + h - 10 - Math.max(waterH, 14));
+
+  // 吐出口
+  for (const hole of sim.holes) {
+    const hx = hole.gx * CELL_PX + CELL_PX / 2;
+    cx.fillStyle = "#101820";
+    cx.beginPath();
+    cx.arc(hx, y + h, 2 + params.holeDia * 1.4, 0, Math.PI * 2);
+    cx.fill();
+    // 流出中の穴から水滴を発生
+    if (hole.flow > 0 && Math.random() < Math.min(0.5, hole.flow * 4000)) {
+      sim.drops.push({ x: hx + (Math.random() - 0.5) * 3, y: y + h + 3, vy: 20, life: 1 });
+    }
+    if (hole.bubbling && Math.random() < 0.25) {
+      sim.bubbles.push({ x: hx + (Math.random() - 0.5) * 4, y: y + h - 4, life: 1 });
+    }
+  }
+  cx.textAlign = "left";
+}
+
+function roundRect(x, y, w, h, r) {
+  cx.beginPath();
+  cx.moveTo(x + r, y);
+  cx.arcTo(x + w, y, x + w, y + h, r);
+  cx.arcTo(x + w, y + h, x, y + h, r);
+  cx.arcTo(x, y + h, x, y, r);
+  cx.arcTo(x, y, x + w, y, r);
+  cx.closePath();
+}
+
+function updateParticles() {
+  // 水滴（穴から土へ）
+  cx.fillStyle = "rgba(90,170,255,0.9)";
+  for (const d of sim.drops) {
+    d.y += 1.6;
+    d.life -= 0.06;
+    cx.beginPath(); cx.arc(d.x, d.y, 2, 0, Math.PI * 2); cx.fill();
+  }
+  sim.drops = sim.drops.filter(d => d.life > 0 && d.y < SOIL_TOP + 14);
+
+  // 気泡（穴から水中を上昇）
+  cx.strokeStyle = "rgba(230,245,255,0.85)";
+  cx.lineWidth = 1;
+  const topY = BOTTLE_Y + BOTTLE_H - 4 - (sim.water / BOTTLE.volume) * (BOTTLE_H - 24);
+  for (const b of sim.bubbles) {
+    b.y -= 2.2;
+    b.x += (Math.random() - 0.5) * 1.2;
+    b.life -= 0.012;
+    if (b.y < topY + 4) b.life = 0;
+    cx.beginPath(); cx.arc(b.x, b.y, 2.4, 0, Math.PI * 2); cx.stroke();
+  }
+  sim.bubbles = sim.bubbles.filter(b => b.life > 0);
+}
+
+function drawLegend() {
+  const y0 = cv.height - 16;
+  cx.font = "10px sans-serif";
+  cx.fillStyle = "#c8d2de";
+  cx.fillText("土壌水分：", 8, y0 + 4);
+  for (let i = 0; i <= 20; i++) {
+    cx.fillStyle = soilColor(i / 20);
+    cx.fillRect(62 + i * 6, y0 - 5, 6, 10);
+  }
+  cx.fillStyle = "#c8d2de";
+  cx.fillText("乾", 62, y0 + 16);
+  cx.fillText("湿", 62 + 20 * 6 - 8, y0 + 16);
+}
+
+/* ---------------- グラフ ---------------- */
+function drawChart(canvasId, key, maxOverride) {
+  const c = document.getElementById(canvasId);
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const H = sim.history;
+  if (H.length < 2) return;
+  let max = maxOverride || 0;
+  if (!maxOverride) { for (const p of H) max = Math.max(max, p[key]); max = max * 1.15 + 1e-6; }
+  const t0 = H[0].t, t1 = H[H.length - 1].t;
+  const span = Math.max(t1 - t0, 600);
+  g.strokeStyle = "#5aa9ff"; g.lineWidth = 1.5;
+  g.beginPath();
+  for (let i = 0; i < H.length; i++) {
+    const px = ((H[i].t - t0) / span) * (c.width - 4) + 2;
+    const py = c.height - 3 - (H[i][key] / max) * (c.height - 8);
+    if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+  }
+  g.stroke();
+  // 日付の目盛り
+  g.strokeStyle = "rgba(255,255,255,0.12)";
+  g.lineWidth = 1;
+  const dayStart = Math.ceil(t0 / 86400) * 86400;
+  for (let td = dayStart; td <= t1; td += 86400) {
+    const px = ((td - t0) / span) * (c.width - 4) + 2;
+    g.beginPath(); g.moveTo(px, 0); g.lineTo(px, c.height); g.stroke();
+  }
+  g.fillStyle = "#9fb0c3"; g.font = "9px sans-serif";
+  g.fillText(max >= 100 ? Math.round(max) : max.toFixed(1), 4, 10);
+}
+
+/* ---------------- UI ---------------- */
+function fmtTime(sec) {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return d > 0 ? `${d}日 ${h}時間` : h > 0 ? `${h}時間 ${m}分` : `${m}分`;
+}
+
+function updateUI() {
+  document.getElementById("stWater").innerHTML = `${Math.round(sim.water)} <small>mL</small>`;
+  let m = 0;
+  for (const h of sim.holes) m += moistureAtHole(h);
+  m /= sim.holes.length;
+  document.getElementById("stMoist").innerHTML = `${(m * 100).toFixed(0)} <small>%</small>`;
+  document.getElementById("stFlow").innerHTML = `${sim.flowRate.toFixed(1)} <small>mL/h</small>`;
+  document.getElementById("stPress").innerHTML = `${(headPressure() - P_ATM).toFixed(2)} <small>kPa</small>`;
+  document.getElementById("stTime").textContent = fmtTime(sim.t);
+
+  // 空になるまでの推定：直近の平均流出速度から
+  const el = document.getElementById("stDays");
+  if (sim.water <= 1) el.textContent = "空です";
+  else {
+    const recent = sim.history.filter(p => sim.t - p.t < 86400);
+    const avg = recent.length > 3 ? recent.reduce((s, p) => s + p.flow, 0) / recent.length : sim.flowRate;
+    el.textContent = avg > 0.05 ? `約 ${(sim.water / avg / 24).toFixed(1)} 日` : "—";
+  }
+
+  const badge = document.getElementById("stateBadge");
+  const anyBubble = sim.holes.some(h => h.bubbling);
+  if (sim.flowRate > 0.5 && anyBubble) { badge.textContent = "流出中（空気侵入）"; badge.className = "state-badge airin"; }
+  else if (sim.flowRate > 0.5) { badge.textContent = "流出中"; badge.className = "state-badge flowing"; }
+  else { badge.textContent = "停止（水封・負圧平衡）"; badge.className = "state-badge stopped"; }
+}
+
+document.getElementById("holeCount").addEventListener("input", e => {
+  params.holeCount = +e.target.value;
+  document.getElementById("holeCountVal").textContent = `${params.holeCount} 個`;
+  sim.holes = holePositions(params.holeCount);
+});
+document.getElementById("holeDia").addEventListener("input", e => {
+  params.holeDia = +e.target.value;
+  document.getElementById("holeDiaVal").textContent = `${params.holeDia.toFixed(1)} mm`;
+});
+document.getElementById("weather").addEventListener("change", e => {
+  if (e.target.value === "rain") { params.rain = true; params.weatherFactor = 0; }
+  else { params.rain = false; params.weatherFactor = +e.target.value; }
+});
+document.getElementById("soilType").addEventListener("change", e => { params.soil = SOILS[e.target.value]; });
+document.getElementById("speed").addEventListener("change", e => { params.speed = +e.target.value; });
+document.getElementById("btnPause").addEventListener("click", e => {
+  sim.running = !sim.running;
+  e.target.textContent = sim.running ? "⏸ 一時停止" : "▶ 再開";
+});
+document.getElementById("btnRefill").addEventListener("click", refill);
+document.getElementById("btnReset").addEventListener("click", reset);
+
+/* ---------------- メインループ ---------------- */
+let lastFrame = performance.now();
+function frame(now) {
+  const wall = Math.min((now - lastFrame) / 1000, 0.1);
+  lastFrame = now;
+
+  if (sim.running) {
+    let remain = wall * params.speed; // 進めるべきシミュレーション秒
+    const DT = 2.0;                   // 物理ステップ
+    while (remain > 0) {
+      const dt = Math.min(DT, remain);
+      step(dt);
+      remain -= dt;
+    }
+    record();
+  }
+
+  draw();
+  updateUI();
+  drawChart("chartWater", "water", 1000);
+  drawChart("chartMoist", "moist", 100);
+  drawChart("chartFlow", "flow");
+  requestAnimationFrame(frame);
+}
+
+reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
