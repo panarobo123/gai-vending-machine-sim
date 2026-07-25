@@ -127,10 +127,6 @@
 
     <div class="card">
       <h2>■ 推移グラフ（過去3日分）</h2>
-      <div class="chart-label">残り水量 [mL]</div>
-      <canvas id="chartWater" class="chart" width="380" height="60"></canvas>
-      <div class="chart-label">吐出口付近の土壌水分 [%]</div>
-      <canvas id="chartMoist" class="chart" width="380" height="60"></canvas>
       <div class="chart-label">流出速度 [mL/h]</div>
       <canvas id="chartFlow" class="chart" width="380" height="60"></canvas>
       <div class="chart-label">負圧 vac / 水封圧 seal [kPa]（<span style="color:#ff6b6b">■vac</span> <span style="color:#5aa9ff">■seal</span>／交差で気泡発生）</div>
@@ -715,8 +711,6 @@ function frame(now) {
 
   draw();
   updateUI();
-  drawChart("chartWater", "water", 1000);
-  drawChart("chartMoist", "moist", 100);
   drawChart("chartFlow", "flow");
   drawDualChart("chartVacSeal", "vac", "#ff6b6b", "seal", "#5aa9ff");
   requestAnimationFrame(frame);
