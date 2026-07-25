@@ -133,6 +133,8 @@
       <canvas id="chartMoist" class="chart" width="380" height="60"></canvas>
       <div class="chart-label">流出速度 [mL/h]</div>
       <canvas id="chartFlow" class="chart" width="380" height="60"></canvas>
+      <div class="chart-label">負圧 vac / 水封圧 seal [kPa]（<span style="color:#ff6b6b">■vac</span> <span style="color:#5aa9ff">■seal</span>／交差で気泡発生）</div>
+      <canvas id="chartVacSeal" class="chart" width="380" height="60"></canvas>
     </div>
 
     <div class="card">
@@ -369,10 +371,12 @@ let lastRecord = -1e9;
 function record() {
   if (sim.t - lastRecord < 120) return; // 2分ごと
   lastRecord = sim.t;
-  let m = 0;
-  for (const h of sim.holes) m += moistureAtHole(h);
+  let m = 0, sealAvg = 0;
+  for (const h of sim.holes) { const th = moistureAtHole(h); m += th; sealAvg += sealPressure(th); }
   m /= sim.holes.length;
-  sim.history.push({ t: sim.t, water: sim.water, moist: m * 100, flow: sim.flowRate });
+  sealAvg /= sim.holes.length;
+  const vac = P_ATM - (headPressure() + RHO_G * headHeightM());
+  sim.history.push({ t: sim.t, water: sim.water, moist: m * 100, flow: sim.flowRate, vac, seal: sealAvg });
   const keep = 3 * 86400;
   while (sim.history.length > 0 && sim.t - sim.history[0].t > keep) sim.history.shift();
 }
@@ -601,6 +605,41 @@ function drawChart(canvasId, key, maxOverride) {
   g.fillText(max >= 100 ? Math.round(max) : max.toFixed(1), 4, 10);
 }
 
+/* 2系列を同じ縦軸最大値で重ねて描画（交差点を見るためのグラフ） */
+function drawDualChart(canvasId, key1, color1, key2, color2) {
+  const c = document.getElementById(canvasId);
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const H = sim.history;
+  if (H.length < 2) return;
+  let max = 0;
+  for (const p of H) max = Math.max(max, p[key1], p[key2]);
+  max = max * 1.15 + 1e-6;
+  const t0 = H[0].t, t1 = H[H.length - 1].t;
+  const span = Math.max(t1 - t0, 600);
+  function drawLine(key, color) {
+    g.strokeStyle = color; g.lineWidth = 1.5;
+    g.beginPath();
+    for (let i = 0; i < H.length; i++) {
+      const px = ((H[i].t - t0) / span) * (c.width - 4) + 2;
+      const py = c.height - 3 - (H[i][key] / max) * (c.height - 8);
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.stroke();
+  }
+  drawLine(key1, color1);
+  drawLine(key2, color2);
+  g.strokeStyle = "rgba(255,255,255,0.12)";
+  g.lineWidth = 1;
+  const dayStart = Math.ceil(t0 / 86400) * 86400;
+  for (let td = dayStart; td <= t1; td += 86400) {
+    const px = ((td - t0) / span) * (c.width - 4) + 2;
+    g.beginPath(); g.moveTo(px, 0); g.lineTo(px, c.height); g.stroke();
+  }
+  g.fillStyle = "#9fb0c3"; g.font = "9px sans-serif";
+  g.fillText(max >= 100 ? Math.round(max) : max.toFixed(1), 4, 10);
+}
+
 /* ---------------- UI ---------------- */
 function fmtTime(sec) {
   const d = Math.floor(sec / 86400);
@@ -679,6 +718,7 @@ function frame(now) {
   drawChart("chartWater", "water", 1000);
   drawChart("chartMoist", "moist", 100);
   drawChart("chartFlow", "flow");
+  drawDualChart("chartVacSeal", "vac", "#ff6b6b", "seal", "#5aa9ff");
   requestAnimationFrame(frame);
 }
 
