@@ -4,32 +4,78 @@
     <meta charset="UTF-8">
     <title>自動販売機シミュレーター</title>
     <style>
+        :root {
+            --bg-color: #f4f4f4;
+            --container-bg: #fff;
+            --container-shadow: rgba(0, 0, 0, 0.1);
+            --text-color: #333;
+            --panel-bg: #e7f2f8;
+            --panel-border: #b1d4e0;
+            --white-bg: #eff3f4;
+            --white-color: #bbbbbb;
+            --output-bg: #e9e9e9;
+            --output-border: #cccccc;
+            --debug-panel-bg: #f6f8fa;
+            --debug-panel-border: #e1e4e8;
+            --debug-panel-color: #333;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #0d1117;
+            --container-bg: #161b22;
+            --container-shadow: rgba(0, 0, 0, 0.4);
+            --text-color: #c9d1d9;
+            --panel-bg: #1c2a35;
+            --panel-border: #2c4356;
+            --white-bg: #21262d;
+            --white-color: #6e7681;
+            --output-bg: #21262d;
+            --output-border: #30363d;
+            --debug-panel-bg: #21262d;
+            --debug-panel-border: #30363d;
+            --debug-panel-color: #c9d1d9;
+        }
+
         body {
             font-family: 'Arial', sans-serif;
-            background-color: #f4f4f4;
+            background-color: var(--bg-color);
+            color: var(--text-color);
             margin: 0;
             padding: 0;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #fff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background-color: var(--container-bg);
+            box-shadow: 0 2px 4px var(--container-shadow);
+        }
+
+        .header-bar {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        #theme-toggle {
+            background-color: var(--white-bg);
+            color: var(--text-color);
+            border: 1px solid var(--panel-border);
         }
 
         h1 {
-            color: #333;
+            color: var(--text-color);
             text-align: center;
         }
 
         .panel {
-            background-color: #e7f2f8;
-            border: 1px solid #b1d4e0;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--panel-border);
             border-radius: 5px;
             padding: 15px;
             margin-bottom: 20px;
+            color: var(--text-color);
         }
 
         .flex-container {
@@ -59,8 +105,8 @@
         }
 
         .white {
-            background-color: #eff3f4;
-            color: #bbbbbb;
+            background-color: var(--white-bg);
+            color: var(--white-color);
         }
 
         .disabled {
@@ -77,10 +123,11 @@
 
         #output, #change {
             margin-top: 5px;
-            background-color: #e9e9e9;
+            background-color: var(--output-bg);
             padding: 15px;
             border-radius: 5px;
-            border: 1px solid #cccccc;
+            border: 1px solid var(--output-border);
+            color: var(--text-color);
         }
 
         #debug-console {
@@ -88,20 +135,23 @@
         }
 
         .debug-panel {
-            background-color: #f6f8fa;
-            border: 1px solid #e1e4e8;
+            background-color: var(--debug-panel-bg);
+            border: 1px solid var(--debug-panel-border);
             border-radius: 5px;
             margin-bottom: 10px;
             padding: 10px;
             height: 60px;
             overflow-y: auto; /* コンテンツがはみ出た場合にスクロールバーを表示 */
             font-size: 0.9em;
-            color: #333;
+            color: var(--debug-panel-color);
         }
     </style>
 </head>
 <body>
 <div class="container">
+    <div class="header-bar">
+        <div id="theme-toggle" class="button">🌙 ダークモード</div>
+    </div>
     <h1>自動販売機シミュレーター</h1>
     <div class="flex-container">
         <div id="coffee" class="button white">コーヒー (100円) [1]</div>
@@ -144,6 +194,30 @@
     let eventBuffer = [];
     let lastActionTime = new Date();
     let conversationHistory = [];
+
+    // ダークモードの初期化と切り替え
+    const themeToggleButton = document.getElementById('theme-toggle');
+
+    const applyTheme = (theme) => {
+        if (theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeToggleButton.textContent = '☀️ ライトモード';
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+            themeToggleButton.textContent = '🌙 ダークモード';
+        }
+    };
+
+    const storedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(storedTheme || (prefersDark ? 'dark' : 'light'));
+
+    themeToggleButton.addEventListener('click', () => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const newTheme = isDark ? 'light' : 'dark';
+        applyTheme(newTheme);
+        localStorage.setItem('theme', newTheme);
+    });
 
     // UIを更新する関数
     const updateUI = () => {
