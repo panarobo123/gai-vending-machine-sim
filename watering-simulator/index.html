@@ -261,7 +261,6 @@ function refill() {
 /* 1ステップ（dt秒）進める */
 function step(dt) {
   const soil = params.soil;
-  const nHoles = sim.holes.length;
   const holeAreaFactor = Math.pow(params.holeDia / 1.0, 2);
 
   // --- ボトルからの流出と空気侵入 ---
@@ -270,32 +269,39 @@ function step(dt) {
   let totalOut = 0;
   let airIn = 0;
 
-  for (const h of sim.holes) {
-    const th = moistureAtHole(h);
+  // 全吐出口共通の乾湿状態（ヘッドスペースは1つに繋がっているため、
+  // 穴ごとの局所的な湿りムラではなく全体の平均で流出・空気侵入を判定する。
+  // こうしないと先に流出した穴の直下だけ湿って水封され、他の穴だけが
+  // 泡立つといった偏りが生じてしまう）
+  let avgTh = 0;
+  for (const h of sim.holes) avgTh += moistureAtHole(h);
+  avgTh /= sim.holes.length;
 
+  const dP = pBottom - P_ATM + suction(avgTh);
+  const vac = P_ATM - pBottom;
+  const seal = sealPressure(avgTh);
+  const flowing = dP > 0 && sim.water > 0;
+  const bubbling = vac > seal && sim.water > 0;
+  const infil = 0.15 + 0.85 * Math.pow(Math.max(0, 1 - avgTh), 1.5);
+
+  for (const h of sim.holes) {
     // 水の流出：内圧 + 土の吸引 − 大気圧 が正なら流出
     // 土が飽和に近いと浸透が律速になり流量が落ちる
-    if (sim.water > 0) {
-      const dP = pBottom - P_ATM + suction(th);
-      if (dP > 0) {
-        const infil = 0.15 + 0.85 * Math.pow(Math.max(0, 1 - th), 1.5);
-        // 係数: 1kPa 差・φ1mm・壌土で ≒ 2.2mL/h
-        const q = 2.2 / 3600 * holeAreaFactor * soil.drain * infil * dP; // mL/s
-        const out = Math.min(q * dt, sim.water);
-        totalOut += out;
-        // 直下のセルへ給水
-        const idx = 0 * NX + h.gx;
-        sim.theta[idx] = Math.min(1, sim.theta[idx] + out / (CELL_VOL * POROSITY));
-        h.flow = out / dt; // 演出用
-      } else {
-        h.flow = 0;
-      }
+    if (flowing) {
+      // 係数: 1kPa 差・φ1mm・壌土で ≒ 2.2mL/h（全穴同一条件なので流量も均一）
+      const q = 2.2 / 3600 * holeAreaFactor * soil.drain * infil * dP; // mL/s
+      const out = q * dt;
+      totalOut += out;
+      // 直下のセルへ給水
+      const idx = 0 * NX + h.gx;
+      sim.theta[idx] = Math.min(1, sim.theta[idx] + out / (CELL_VOL * POROSITY));
+      h.flow = out / dt; // 演出用
+    } else {
+      h.flow = 0;
     }
 
-    // 空気侵入：負圧が水封圧を超えると気泡が入る
-    const vac = P_ATM - pBottom;
-    const seal = sealPressure(th);
-    if (vac > seal && sim.water > 0) {
+    // 空気侵入：負圧が水封圧を超えると全ての穴で均一に気泡が入る
+    if (bubbling) {
       // kPa·mL/s : 侵入した空気は大気圧相当としてヘッドスペースに加算
       const rate = 6.0 * holeAreaFactor * (vac - seal); // kPa·mL/s
       airIn += rate * dt;
@@ -304,6 +310,7 @@ function step(dt) {
       h.bubbling = false;
     }
   }
+  totalOut = Math.min(totalOut, sim.water);
 
   sim.water -= totalOut;
   sim.airK += airIn;
