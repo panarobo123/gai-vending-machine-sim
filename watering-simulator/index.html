@@ -113,9 +113,9 @@
         <label>シミュレーション速度</label>
         <select id="speed">
           <option value="60">×60（1秒＝1分）</option>
-          <option value="600" selected>×600（1秒＝10分）</option>
+          <option value="600">×600（1秒＝10分）</option>
           <option value="1800">×1800（1秒＝30分）</option>
-          <option value="3600">×3600（1秒＝1時間）</option>
+          <option value="3600" selected>×3600（1秒＝1時間）</option>
         </select>
       </div>
       <div class="btns">
@@ -193,7 +193,7 @@ const params = {
   weatherFactor: 1.8,
   rain: false,
   soil: SOILS.loam,
-  speed: 600,
+  speed: 3600,
 };
 
 function headHeightM() { return sim.water / BOTTLE.areaCm2 / 100; } // 水位 m
