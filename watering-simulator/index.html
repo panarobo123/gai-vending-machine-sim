@@ -57,7 +57,7 @@
 
 <div class="layout">
   <div class="view-panel">
-    <canvas id="view" class="main" width="640" height="560"></canvas>
+    <canvas id="view" class="main" width="640" height="434"></canvas>
   </div>
 
   <div class="side-panel">
@@ -387,6 +387,7 @@ const cx = cv.getContext("2d");
 // レイアウト定数（キャンバス座標）
 const SOIL_TOP = 300;
 const CELL_PX = cv.width / NX; // 13.33px
+const CELL_PY = CELL_PX / 2; // 土壌の描画を縦に半分の厚みにして見やすくする
 const BOTTLE_W = BOTTLE.widthCells * CELL_PX;
 const BOTTLE_X = (cv.width - BOTTLE_W) / 2;
 const BOTTLE_H = 210;
@@ -431,7 +432,7 @@ function draw() {
   for (let y = 0; y < NY; y++) {
     for (let x = 0; x < NX; x++) {
       cx.fillStyle = soilColor(sim.theta[y * NX + x]);
-      cx.fillRect(x * CELL_PX, SOIL_TOP + y * CELL_PX, CELL_PX + 0.5, CELL_PX + 0.5);
+      cx.fillRect(x * CELL_PX, SOIL_TOP + y * CELL_PY, CELL_PX + 0.5, CELL_PY + 0.5);
     }
   }
 
