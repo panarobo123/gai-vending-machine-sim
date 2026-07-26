@@ -13,7 +13,6 @@
     padding: 12px;
   }
   h1 { font-size: 18px; margin-bottom: 4px; }
-  .subtitle { font-size: 12px; color: #9fb0c3; margin-bottom: 10px; }
   .layout { display: flex; flex-wrap: wrap; gap: 12px; }
   .view-panel { flex: 1 1 460px; min-width: 320px; }
   .side-panel { flex: 1 1 300px; min-width: 280px; max-width: 420px; }
@@ -51,9 +50,6 @@
 </head>
 <body>
 <h1>🌱 1L耐圧ペットボトル水やり器シミュレータ</h1>
-<div class="subtitle">
-  底面の小さな吐出口＋土の乾湿による自動調整（負圧式）── 土が乾くと水が出て、湿ると止まる仕組みを再現
-</div>
 
 <div class="layout">
   <div class="view-panel">
@@ -441,6 +437,9 @@ function draw() {
     }
   }
 
+  // 土の中の説明文
+  drawSoilCaption();
+
   // 植物（根域の左右に2株）
   drawPlant(BOTTLE_X - 46, SOIL_TOP);
   drawPlant(BOTTLE_X + BOTTLE_W + 46, SOIL_TOP);
@@ -563,6 +562,23 @@ function updateParticles() {
     cx.beginPath(); cx.arc(b.x, b.y, 2.4, 0, Math.PI * 2); cx.stroke();
   }
   sim.bubbles = sim.bubbles.filter(b => b.life > 0);
+}
+
+function drawSoilCaption() {
+  const lines = [
+    "底面の小さな吐出口＋土の乾湿による自動調整（負圧式）",
+    "── 土が乾くと水が出て、湿ると止まる仕組みを再現",
+  ];
+  cx.save();
+  cx.font = "12px sans-serif";
+  cx.textAlign = "center";
+  cx.shadowColor = "rgba(0,0,0,0.55)";
+  cx.shadowBlur = 3;
+  cx.fillStyle = "rgba(255,248,232,0.92)";
+  const y0 = SOIL_TOP + 44;
+  lines.forEach((line, i) => cx.fillText(line, cv.width / 2, y0 + i * 18));
+  cx.restore();
+  cx.textAlign = "left";
 }
 
 function drawLegend() {
