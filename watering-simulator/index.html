@@ -389,8 +389,10 @@ const cv = document.getElementById("view");
 const cx = cv.getContext("2d");
 
 // レイアウト定数（キャンバス座標）
-const SOIL_TOP = 300;
+// 土の表示の厚みを半分にし、減った分は上（空・ボトル側）に回す
+const SOIL_TOP = 430;
 const CELL_PX = cv.width / NX; // 13.33px
+const CELL_PY = (cv.height - SOIL_TOP) / NY; // 土セルの縦幅（横幅より薄い）
 const BOTTLE_W = BOTTLE.widthCells * CELL_PX;
 const BOTTLE_X = (cv.width - BOTTLE_W) / 2;
 const BOTTLE_H = 210;
@@ -435,7 +437,7 @@ function draw() {
   for (let y = 0; y < NY; y++) {
     for (let x = 0; x < NX; x++) {
       cx.fillStyle = soilColor(sim.theta[y * NX + x]);
-      cx.fillRect(x * CELL_PX, SOIL_TOP + y * CELL_PX, CELL_PX + 0.5, CELL_PX + 0.5);
+      cx.fillRect(x * CELL_PX, SOIL_TOP + y * CELL_PY, CELL_PX + 0.5, CELL_PY + 0.5);
     }
   }
 
