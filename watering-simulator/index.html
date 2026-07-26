@@ -93,8 +93,8 @@
       </div>
       <div class="row">
         <label>吐出口の直径</label>
-        <input type="range" id="holeDia" min="0.5" max="2.0" step="0.1" value="1.0">
-        <span class="val" id="holeDiaVal">1.0 mm</span>
+        <input type="range" id="holeDia" min="0.5" max="2.0" step="0.1" value="2.0">
+        <span class="val" id="holeDiaVal">2.0 mm</span>
       </div>
     </div>
 
@@ -104,8 +104,8 @@
         <label>天候（蒸発散量）</label>
         <select id="weather">
           <option value="0.4">曇り・涼しい</option>
-          <option value="1.0" selected>晴れ</option>
-          <option value="1.8">真夏の晴天</option>
+          <option value="1.0">晴れ</option>
+          <option value="1.8" selected>真夏の晴天</option>
           <option value="rain">雨</option>
         </select>
       </div>
@@ -194,8 +194,8 @@ const sim = {
 
 const params = {
   holeCount: 100,
-  holeDia: 1.0,
-  weatherFactor: 1.0,
+  holeDia: 2.0,
+  weatherFactor: 1.8,
   rain: false,
   soil: SOILS.loam,
   speed: 600,
