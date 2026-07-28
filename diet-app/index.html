@@ -327,12 +327,29 @@ function saveState() {
 }
 
 /* ---------------- エクスポート / インポート ---------------- */
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+async function exportData() {
+  const filename = `diet-app-data-${todayStr()}.json`;
+  const jsonStr = JSON.stringify(state, null, 2);
+
+  // Artifactとして表示されている場合は、サンドボックス化されたiframe内から
+  // 直接ダウンロードを起動できないため、window.claude.downloads経由で保存する。
+  if (window.claude && window.claude.downloads) {
+    try {
+      await window.claude.downloads.save({ filename, data: jsonStr });
+    } catch (e) {
+      if (e && e.code !== "declined") {
+        alert("エクスポートに失敗しました: " + (e && (e.message || e.code) || e));
+      }
+    }
+    return;
+  }
+
+  // ローカルファイルとして開いている場合は通常のBlobダウンロードを使用
+  const blob = new Blob([jsonStr], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `diet-app-data-${todayStr()}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
