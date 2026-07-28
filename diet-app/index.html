@@ -64,6 +64,8 @@
   .add-form input, .add-form select { flex: 1 1 auto; }
   .add-form .kcal-fields { display: flex; gap: 4px; }
   .add-form .kcal-fields input { width: 4.5em; }
+  .add-form .kcal-fields input#fQty { width: 3.8em; border-color: #6b8fb8; }
+  .food-item .qty { color: #8fc7ff; font-size: 10px; margin-left: 6px; }
 
   .meal-group { margin-bottom: 6px; }
   .meal-group h3 { display: flex; justify-content: space-between; }
@@ -210,6 +212,7 @@
           <input type="number" id="fP" placeholder="P(g)" min="0" step="0.1">
           <input type="number" id="fF" placeholder="F(g)" min="0" step="0.1">
           <input type="number" id="fC" placeholder="C(g)" min="0" step="0.1">
+          <input type="number" id="fQty" placeholder="数量" min="0.1" step="0.5" value="1" title="数量（kcal・P/F/Cはこの数量分で合計されます）">
         </div>
         <button id="btnAddFood" class="primary">追加</button>
       </div>
@@ -456,7 +459,7 @@ function renderFoodLog() {
     } else {
       for (const f of items) {
         html += `<div class="food-item">
-          <span class="name">${escapeHtml(f.name)}</span>
+          <span class="name">${escapeHtml(f.name)}${f.qty && f.qty !== 1 ? `<span class="qty">×${f.qty}</span>` : ""}</span>
           <span class="pfc">P${f.p||0} F${f.f||0} C${f.c||0}</span>
           <span class="kcal">${Math.round(f.kcal)} kcal</span>
           <button class="danger" data-del-food="${f.id}">削除</button>
@@ -700,27 +703,32 @@ presetSelect.addEventListener("change", () => {
   document.getElementById("fP").value = f.p;
   document.getElementById("fF").value = f.f;
   document.getElementById("fC").value = f.c;
+  document.getElementById("fQty").value = 1;
 });
 
 document.getElementById("btnAddFood").addEventListener("click", () => {
   const name = document.getElementById("fName").value.trim();
   const kcal = +document.getElementById("fKcal").value;
-  if (!name || !kcal) return;
+  const qty = +document.getElementById("fQty").value || 1;
+  if (!name || !kcal || qty <= 0) return;
+  const round1 = v => Math.round(v * 10) / 10;
   state.foodLogs.push({
     id: state.nextId++,
     date: viewDate,
     meal: document.getElementById("fMeal").value,
     name,
-    kcal,
-    p: +document.getElementById("fP").value || 0,
-    f: +document.getElementById("fF").value || 0,
-    c: +document.getElementById("fC").value || 0
+    qty,
+    kcal: Math.round(kcal * qty),
+    p: round1((+document.getElementById("fP").value || 0) * qty),
+    f: round1((+document.getElementById("fF").value || 0) * qty),
+    c: round1((+document.getElementById("fC").value || 0) * qty)
   });
   document.getElementById("fName").value = "";
   document.getElementById("fKcal").value = "";
   document.getElementById("fP").value = "";
   document.getElementById("fF").value = "";
   document.getElementById("fC").value = "";
+  document.getElementById("fQty").value = 1;
   presetSelect.value = "";
   saveState();
   renderAll();
