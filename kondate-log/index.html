@@ -1606,7 +1606,7 @@ function bindStatic(){
     state = defaultState();
   }
   bindStatic();
-  render();
+  if(raw){ render(); } else { insertDemo(); }
   setSave("", store.persistent ? (raw ? "保存済み" : "自動保存オン") : "このタブのみ保持");
 })();
 </script>
