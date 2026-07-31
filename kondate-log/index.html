@@ -1606,7 +1606,14 @@ function bindStatic(){
     state = defaultState();
   }
   bindStatic();
-  if(raw){ render(); } else { insertDemo(); }
+  if(raw){
+    render();
+  }else{
+    insertDemo();
+    view = "settings";
+    render();
+    toast("サンプル記録を用意しました。まずは「あなたの情報」を入力してください");
+  }
   setSave("", store.persistent ? (raw ? "保存済み" : "自動保存オン") : "このタブのみ保持");
 })();
 </script>
