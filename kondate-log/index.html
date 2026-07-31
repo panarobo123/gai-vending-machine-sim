@@ -402,7 +402,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--ai);outline:none;box-
       <div class="stats" id="trendStats"></div>
       <section class="panel">
         <div class="panel-head">
-          <div><span class="eyebrow">14 days</span><h2>摂取カロリーの推移</h2></div>
+          <div><span class="eyebrow">28 days</span><h2>摂取カロリーの推移</h2></div>
           <span class="side">点線 = 目標</span>
         </div>
         <div id="kcalChart"></div>
@@ -1180,7 +1180,7 @@ function openMealChoice(food){
 function renderTrend(){
   const target = targetKcal();
   const days = [];
-  for(let i=13;i>=0;i--){
+  for(let i=27;i>=0;i--){
     const d = shift(new Date(), -i), k = dkey(d);
     days.push({k:k, d:d, kcal: dayTotals(k).kcal, logged: !!state.logs[k]});
   }
@@ -1195,7 +1195,7 @@ function renderTrend(){
       }).join("") + '</div>' +
     '</div>' +
     '<div class="bc-x">' + days.map(function(x,i){
-      return '<span>' + ((i%2===0 || i===13) ? (x.d.getMonth()+1) + "/" + x.d.getDate() : "") + '</span>';
+      return '<span>' + ((i%4===0 || i===27) ? (x.d.getMonth()+1) + "/" + x.d.getDate() : "") + '</span>';
     }).join("") + '</div>';
 
   const logged = days.filter(function(x){ return x.kcal > 0; });
@@ -1210,7 +1210,7 @@ function renderTrend(){
   document.getElementById("trendStats").innerHTML =
     stat("直近7日の平均", nf(avg), "kcal") +
     stat("目標との差", (avg ? (avg-target>=0?"+":"") + nf(avg-target) : "—"), "kcal") +
-    stat("記録した日", logged.length + " / 14", "日") +
+    stat("記録した日", logged.length + " / 28", "日") +
     stat("体重の変化", (wpts.length>1 ? (dw>=0?"+":"") + d1(dw) : "—"), "kg");
 
   renderWeight(wpts);
@@ -1374,8 +1374,8 @@ function insertDemo(){
     dinner:[["p01",140],["p25",80],["p40",150],["p48",60]],
     snack:[["p58",90],["p81",16]]
   };
-  const w0 = num(state.profile.weight, 60) + 1.1;
-  for(let i=13;i>=0;i--){
+  const w0 = num(state.profile.weight, 60) + 2.0;
+  for(let i=27;i>=0;i--){
     const k = dkey(shift(new Date(), -i));
     const day = getDay(k, true);
     MEALS.forEach(function(m){
@@ -1390,10 +1390,10 @@ function insertDemo(){
       });
     });
     if(day.weight === null || day.weight === undefined || day.weight === ""){
-      day.weight = Math.round((w0 - (13-i)*0.075 + (Math.random()-0.5)*0.35) * 10) / 10;
+      day.weight = Math.round((w0 - (27-i)*0.075 + (Math.random()-0.5)*0.35) * 10) / 10;
     }
   }
-  save(); render(); toast("14日分のサンプル記録を入れました");
+  save(); render(); toast("28日分のサンプル記録を入れました");
 }
 function askReset(){
   openSheet(
