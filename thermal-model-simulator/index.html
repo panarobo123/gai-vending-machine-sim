@@ -159,7 +159,7 @@
       <path d="M205 390V366" stroke="#d93025" stroke-width="2" fill="none" marker-end="url(#ah)"/>
       <path d="M260 390V366" stroke="#d93025" stroke-width="2" fill="none" marker-end="url(#ah)"/>
       <text x="308" y="399" font-size="11.5" fill="#d93025">ヒーター</text>
-      <text x="308" y="414" font-size="11.5" fill="#d93025">P=<tspan id="sP" font-weight="bold">100</tspan>W 一定</text>
+      <text x="308" y="414" font-size="11.5" fill="#d93025">P=<tspan id="sP" font-weight="bold">30</tspan>W 一定</text>
 
       <!-- 湯 -->
       <rect id="waterRect" x="98" y="118" width="224" height="258" fill="hsl(210,70%,72%)" opacity=".6"/>
@@ -233,7 +233,7 @@
     </div>
     <div class="field" style="max-width:110px;">
       <label>ヒーター出力 W (0〜100)</label>
-      <input type="number" id="inPow" value="100" min="0" max="100" step="1">
+      <input type="number" id="inPow" value="30" min="0" max="100" step="1">
     </div>
     <div class="field" style="max-width:150px;">
       <label>保温方法</label>
@@ -247,6 +247,7 @@
     <div class="field" style="max-width:120px;">
       <label>倍速</label>
       <select id="inSpeed">
+        <option value="1">×1 (90分)</option>
         <option value="10">×10 (9分)</option>
         <option value="60" selected>×60 (90秒)</option>
         <option value="300">×300 (18秒)</option>
