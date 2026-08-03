@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>低温調理（Sous Vide）シミュレータ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+    background: #1c2430;
+    color: #e8ecf1;
+    padding: 12px;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #9fb0c3; margin-bottom: 10px; }
+  .layout { display: flex; flex-wrap: wrap; gap: 12px; }
+  .view-panel { flex: 1 1 460px; min-width: 320px; }
+  .side-panel { flex: 1 1 300px; min-width: 280px; max-width: 420px; }
+  canvas.main { width: 100%; background: #0e1420; border-radius: 8px; display: block; }
+  .card {
+    background: #263242; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+  }
+  .card h2 { font-size: 13px; color: #8fc7ff; margin-bottom: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .row label { flex: 0 0 10.5em; }
+  .row input[type=range] { flex: 1; }
+  .row .val { flex: 0 0 6em; text-align: right; color: #ffd479; font-variant-numeric: tabular-nums; }
+  select, button {
+    background: #34455c; color: #e8ecf1; border: 1px solid #4a5f7c;
+    border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  select { flex: 1; }
+  button:hover { background: #40557a; }
+  button.primary { background: #2f6fb2; border-color: #4a8fd4; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
+  .stat { background: #1d2735; border-radius: 6px; padding: 6px 8px; }
+  .stat .k { color: #9fb0c3; font-size: 10px; }
+  .stat .v { font-size: 15px; color: #ffd479; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 10px; color: #c2cbd6; }
+  .chart-label { font-size: 11px; color: #9fb0c3; margin: 6px 0 2px; }
+  canvas.chart { width: 100%; height: 60px; background: #1d2735; border-radius: 6px; display: block; }
+  .state-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: bold;
+  }
+  .heating { background: #b26f2f; }
+  .reached { background: #2f8f4e; }
+  .pasteurized { background: #1d6fd4; }
+  .progress {
+    background: #1d2735; border-radius: 6px; height: 10px; overflow: hidden; margin-top: 4px;
+  }
+  .progress-bar { height: 100%; background: linear-gradient(90deg,#2f6fb2,#5aa9ff); width: 0%; }
+  .note { font-size: 11px; color: #9fb0c3; line-height: 1.6; }
+  .warn { font-size: 11px; color: #f0c46a; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>🍲 低温調理（Sous Vide）シミュレータ</h1>
+<div class="subtitle">
+  食材内部への熱伝導と中心温度の上昇、および中心温度の履歴から推定した低温殺菌の進み具合をブラウザ上でシミュレートします
+</div>
+
+<div class="layout">
+  <div class="view-panel">
+    <canvas id="view" class="main" width="640" height="360"></canvas>
+
+    <div class="card">
+      <h2>■ 推移グラフ</h2>
+      <div class="chart-label">中心温度・表面温度 [℃]（<span style="color:#ff8a5a">■中心</span> <span style="color:#5aa9ff">■表面</span>／点線=目標中心温度）</div>
+      <canvas id="chartTemp" class="chart" width="380" height="60"></canvas>
+      <div class="chart-label">低温殺菌の進行度 [log10 削減]（点線=目安の安全ライン）</div>
+      <canvas id="chartLog" class="chart" width="380" height="60"></canvas>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="card">
+      <h2>■ 状態</h2>
+      <div class="row" style="margin-bottom:6px;">
+        <span>調理状態：</span><span id="stateBadge" class="state-badge heating">加熱中</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">中心温度</div><div class="v" id="stCore">-- <small>℃</small></div></div>
+        <div class="stat"><div class="k">表面温度</div><div class="v" id="stSurf">-- <small>℃</small></div></div>
+        <div class="stat"><div class="k">経過時間</div><div class="v" id="stTime">--</div></div>
+        <div class="stat"><div class="k">目標到達まで</div><div class="v" id="stEta">--</div></div>
+      </div>
+      <div class="row" style="margin-top:8px; margin-bottom:2px;">
+        <span>低温殺菌の進行度（目安）</span>
+      </div>
+      <div class="progress"><div class="progress-bar" id="pastBar"></div></div>
+      <div class="stats" style="margin-top:6px;">
+        <div class="stat"><div class="k">推定log10削減</div><div class="v" id="stLog">-- <small>log</small></div></div>
+        <div class="stat"><div class="k">安全ラインまで</div><div class="v" id="stLogEta">--</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>■ 食材の設定</h2>
+      <div class="row">
+        <label>食材</label>
+        <select id="foodType"></select>
+      </div>
+      <div class="row">
+        <label id="thickLabel">厚み</label>
+        <input type="range" id="thickness" min="1.5" max="6.0" step="0.1" value="2.5">
+        <span class="val" id="thicknessVal">2.5 cm</span>
+      </div>
+      <div class="row">
+        <label>調理前の温度</label>
+        <input type="range" id="initTemp" min="0" max="25" step="1" value="5">
+        <span class="val" id="initTempVal">5 ℃</span>
+      </div>
+      <div class="row">
+        <label>目標中心温度</label>
+        <input type="range" id="targetTemp" min="45" max="75" step="0.5" value="60">
+        <span class="val" id="targetTempVal">60.0 ℃</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>■ 加熱条件</h2>
+      <div class="row">
+        <label>湯温（水槽の設定温度）</label>
+        <input type="range" id="waterTemp" min="45" max="75" step="0.5" value="60">
+        <span class="val" id="waterTempVal">60.0 ℃</span>
+      </div>
+      <div class="row">
+        <label>循環方式</label>
+        <select id="circulator">
+          <option value="on" selected>循環あり（immersion circulator）</option>
+          <option value="off">循環なし（湯を対流のみに依存）</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>シミュレーション速度</label>
+        <select id="speed">
+          <option value="30">×30（1秒＝30秒）</option>
+          <option value="60" selected>×60（1秒＝1分）</option>
+          <option value="180">×180（1秒＝3分）</option>
+          <option value="600">×600（1秒＝10分）</option>
+        </select>
+      </div>
+      <div class="btns">
+        <button id="btnPause" class="primary">⏸ 一時停止</button>
+        <button id="btnReset">↺ リセット</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>■ 仕組み（モデルの説明）</h2>
+      <div class="note">
+        食材を厚み方向に一次元の格子に分割し、熱伝導方程式（肉類は平板、卵は球として近似）を
+        差分法で解いています。表面では、湯との温度差に比例して熱が伝わる対流境界条件
+        （循環ありなら熱伝達が強く、なしなら弱い）を使い、湯温は一定に保たれると仮定しています。
+        中心温度の履歴から、D値・z値による一般化された微生物の対数減少（log10削減）モデルで
+        低温殺菌の進み具合を推定しています。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⚠ 安全に関する注意</h2>
+      <div class="warn">
+        低温殺菌の進行度は、教育・シミュレーション目的の簡略化した一般的なモデル（代表的な菌を想定した
+        D値・z値）による推定であり、特定の食材や菌種に対する公的機関の基準値ではありません。
+        実際の調理では、必ず各国・地域の保健当局や信頼できる情報源が示す低温調理の安全ガイドライン
+        （水温・中心温度・保持時間など）に従ってください。このアプリの数値を安全性の根拠として
+        使用しないでください。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------------- 食材プリセット ---------------- */
+const FOODS = {
+  chicken: { name: "鶏むね肉",        geom: "slab",   alpha: 1.4e-7, k: 0.50, sizeLabel: "厚み",
+             thickness: 2.5, thickRange: [1.5, 5.0], initTemp: 5,  target: 60.0, color: "#e8b4a0" },
+  pork:    { name: "豚ロース",        geom: "slab",   alpha: 1.4e-7, k: 0.49, sizeLabel: "厚み",
+             thickness: 3.0, thickRange: [1.5, 6.0], initTemp: 5,  target: 63.0, color: "#eab0ac" },
+  beef:    { name: "牛ステーキ",      geom: "slab",   alpha: 1.3e-7, k: 0.47, sizeLabel: "厚み",
+             thickness: 3.5, thickRange: [1.5, 6.0], initTemp: 5,  target: 54.0, color: "#b5453f" },
+  salmon:  { name: "サーモン",        geom: "slab",   alpha: 1.2e-7, k: 0.45, sizeLabel: "厚み",
+             thickness: 2.5, thickRange: [1.5, 4.5], initTemp: 5,  target: 52.0, color: "#f0836a" },
+  egg:     { name: "卵（半熟卵）",    geom: "sphere", alpha: 1.3e-7, k: 0.50, sizeLabel: "直径",
+             thickness: 4.4, thickRange: [3.5, 6.0], initTemp: 8,  target: 65.0, color: "#f2d98a" },
+};
+
+/* 低温殺菌モデル（一般化した代表的な菌を想定した簡略値。教育・シミュレーション目的） */
+const PASTEUR = { Dref: 6.0, Tref: 70.0, z: 10.0, targetLog: 6.5 };
+function dValue(tempC) {
+  return PASTEUR.Dref * Math.pow(10, (PASTEUR.Tref - tempC) / PASTEUR.z);
+}
+
+/* ---------------- シミュレーション状態 ---------------- */
+const N = 21; // 中心(0)から表面(N-1)までの格子点数
+
+const sim = {
+  t: 0,
+  running: true,
+  T: new Float64Array(N),
+  Tnext: new Float64Array(N),
+  R: 0.0125,      // 半径・半厚み [m]
+  n: 0,           // 形状係数（0=平板, 2=球）
+  alpha: 1.4e-7,
+  k: 0.50,
+  logRed: 0,
+  reachedAt: null,
+  pasteurizedAt: null,
+  history: [],
+};
+
+const params = {
+  food: "chicken",
+  thicknessCm: 2.5,
+  initTemp: 5,
+  targetTemp: 60.0,
+  waterTemp: 60.0,
+  circulator: "on",
+  speed: 60,
+};
+
+function hCoefficient() {
+  return params.circulator === "on" ? 300 : 80; // W/(m^2 K)
+}
+
+function applyFood(key) {
+  const f = FOODS[key];
+  params.food = key;
+  params.thicknessCm = f.thickness;
+  params.initTemp = f.initTemp;
+  params.targetTemp = f.target;
+  params.waterTemp = f.target;
+  sim.n = f.geom === "sphere" ? 2 : 0;
+  sim.alpha = f.alpha;
+  sim.k = f.k;
+}
+
+function reset() {
+  const f = FOODS[params.food];
+  sim.t = 0;
+  sim.R = (params.thicknessCm / 2) / 100; // cm -> m
+  sim.n = f.geom === "sphere" ? 2 : 0;
+  sim.alpha = f.alpha;
+  sim.k = f.k;
+  sim.T.fill(params.initTemp);
+  sim.logRed = 0;
+  sim.reachedAt = null;
+  sim.pasteurizedAt = null;
+  sim.history = [];
+  lastRecord = -1e9;
+}
+
+/* 1ステップ（dt秒）進める：n=0(平板) or n=2(球) の一次元熱伝導 + 対流境界条件 */
+function step(dt) {
+  const T = sim.T, Tn = sim.Tnext;
+  const dr = sim.R / (N - 1);
+  const alpha = sim.alpha, n = sim.n, k = sim.k, h = hCoefficient(), Tw = params.waterTemp;
+
+  // 中心 (r=0)
+  Tn[0] = T[0] + alpha * dt * (n + 1) * 2 * (T[1] - T[0]) / (dr * dr);
+
+  // 内部
+  for (let i = 1; i < N - 1; i++) {
+    const r = i * dr;
+    let lap = (T[i + 1] - 2 * T[i] + T[i - 1]) / (dr * dr);
+    if (n > 0) lap += (n / r) * (T[i + 1] - T[i - 1]) / (2 * dr);
+    Tn[i] = T[i] + alpha * dt * lap;
+  }
+
+  // 表面 (r=R)：対流境界条件をゴースト点で近似
+  const ghost = T[N - 2] - 2 * dr * (h / k) * (T[N - 1] - Tw);
+  const r = sim.R;
+  let lapS = (ghost - 2 * T[N - 1] + T[N - 2]) / (dr * dr);
+  if (n > 0) lapS += (n / r) * (ghost - T[N - 2]) / (2 * dr);
+  Tn[N - 1] = T[N - 1] + alpha * dt * lapS;
+
+  sim.T.set(Tn);
+  sim.t += dt;
+
+  // 低温殺菌の進行度（中心温度＝最も遅く加熱される点の履歴で評価）
+  sim.logRed += dt / dValue(sim.T[0]);
+
+  if (sim.reachedAt === null && sim.T[0] >= params.targetTemp) sim.reachedAt = sim.t;
+  if (sim.pasteurizedAt === null && sim.logRed >= PASTEUR.targetLog) sim.pasteurizedAt = sim.t;
+}
+
+/* ---------------- 記録 ---------------- */
+let lastRecord = -1e9;
+function record() {
+  if (sim.t - lastRecord < 30) return; // 30秒ごと
+  lastRecord = sim.t;
+  sim.history.push({ t: sim.t, core: sim.T[0], surf: sim.T[N - 1], logRed: sim.logRed });
+  const keep = 6 * 3600;
+  while (sim.history.length > 0 && sim.t - sim.history[0].t > keep) sim.history.shift();
+}
+
+/* ---------------- 描画 ---------------- */
+const cv = document.getElementById("view");
+const cx = cv.getContext("2d");
+
+function tempColor(t) {
+  const stops = [
+    { t: 0,  c: [58, 110, 165] },
+    { t: 45, c: [232, 193, 90] },
+    { t: 75, c: [209, 69, 59] },
+  ];
+  let a = stops[0], b = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].t && t <= stops[i + 1].t) { a = stops[i]; b = stops[i + 1]; break; }
+  }
+  const span = Math.max(b.t - a.t, 1e-6);
+  const f = Math.min(1, Math.max(0, (t - a.t) / span));
+  const r = Math.round(a.c[0] + (b.c[0] - a.c[0]) * f);
+  const g = Math.round(a.c[1] + (b.c[1] - a.c[1]) * f);
+  const bl = Math.round(a.c[2] + (b.c[2] - a.c[2]) * f);
+  return `rgb(${r},${g},${bl})`;
+}
+
+function sampleTemp(rFrac) { // rFrac: 0(中心)〜1(表面)
+  const pos = rFrac * (N - 1);
+  const i0 = Math.floor(pos), i1 = Math.min(N - 1, i0 + 1);
+  const f = pos - i0;
+  return sim.T[i0] * (1 - f) + sim.T[i1] * f;
+}
+
+let bubbles = [];
+
+function draw() {
+  cx.clearRect(0, 0, cv.width, cv.height);
+
+  // 水槽
+  const potX = 20, potY = 20, potW = 600, potH = 320;
+  const waterGrad = cx.createLinearGradient(0, potY, 0, potY + potH);
+  const wc = tempColor(params.waterTemp);
+  waterGrad.addColorStop(0, "rgba(40,70,110,0.9)");
+  waterGrad.addColorStop(1, "rgba(20,40,70,0.9)");
+  cx.fillStyle = waterGrad;
+  roundRect(cx, potX, potY, potW, potH, 10);
+  cx.fill();
+  cx.strokeStyle = "rgba(200,220,240,0.5)";
+  cx.lineWidth = 2;
+  roundRect(cx, potX, potY, potW, potH, 10);
+  cx.stroke();
+
+  cx.fillStyle = "#dbe6f2";
+  cx.font = "12px sans-serif";
+  cx.textAlign = "left";
+  cx.fillText(`湯温 ${params.waterTemp.toFixed(1)} ℃`, potX + 12, potY + 20);
+  cx.textAlign = "right";
+  cx.fillText(params.circulator === "on" ? "循環あり" : "循環なし", potX + potW - 12, potY + 20);
+  cx.textAlign = "left";
+
+  // 循環器（サークュレーター）
+  if (params.circulator === "on") {
+    const hx = potX + potW - 40, hy = potY + 30;
+    cx.fillStyle = "#3a4658";
+    cx.fillRect(hx - 10, hy - 20, 20, 50);
+    cx.fillStyle = "#8fc7ff";
+    cx.beginPath();
+    cx.arc(hx, hy + 30, 8, 0, Math.PI * 2);
+    cx.fill();
+    if (Math.random() < 0.5) bubbles.push({ x: hx + (Math.random() - 0.5) * 10, y: hy + 40, life: 1 });
+  }
+
+  const foodKey = params.food;
+  const geom = FOODS[foodKey].geom;
+  const cx0 = potX + potW / 2, cy0 = potY + potH / 2 + 10;
+
+  if (geom === "slab") {
+    const w = 280;
+    const h = Math.min(150, Math.max(40, params.thicknessCm * 22));
+    const x0 = cx0 - w / 2, y0 = cy0 - h / 2;
+    // 内部を厚み方向にグラデーション（中心=w中央, 表面=左右端）
+    const steps = 40;
+    for (let i = 0; i < steps; i++) {
+      const rFrac = Math.abs((i + 0.5) / steps - 0.5) * 2; // 0(中心)〜1(端)
+      cx.fillStyle = tempColor(sampleTemp(rFrac));
+      const sx = x0 + (i / steps) * w;
+      cx.fillRect(sx, y0, w / steps + 0.5, h);
+    }
+    cx.strokeStyle = "rgba(255,255,255,0.55)";
+    cx.lineWidth = 2;
+    roundRect(cx, x0, y0, w, h, 10);
+    cx.stroke();
+
+    cx.fillStyle = "#10141c";
+    cx.font = "12px sans-serif";
+    cx.textAlign = "center";
+    cx.fillText(`中心 ${sim.T[0].toFixed(1)}℃`, cx0, cy0 + 4);
+    cx.fillStyle = "#e8ecf1";
+    cx.fillText(`表面 ${sim.T[N - 1].toFixed(1)}℃`, x0 + 30, y0 - 8);
+    cx.fillText(`表面 ${sim.T[N - 1].toFixed(1)}℃`, x0 + w - 30, y0 - 8);
+  } else {
+    const rad = Math.min(70, Math.max(30, params.thicknessCm * 14));
+    const grad = cx.createRadialGradient(cx0, cy0, 0, cx0, cy0, rad);
+    const stopsN = 6;
+    for (let i = 0; i <= stopsN; i++) {
+      const f = i / stopsN;
+      grad.addColorStop(f, tempColor(sampleTemp(f)));
+    }
+    cx.fillStyle = grad;
+    cx.beginPath();
+    cx.arc(cx0, cy0, rad, 0, Math.PI * 2);
+    cx.fill();
+    cx.strokeStyle = "rgba(255,255,255,0.55)";
+    cx.lineWidth = 2;
+    cx.stroke();
+
+    cx.fillStyle = "#10141c";
+    cx.font = "12px sans-serif";
+    cx.textAlign = "center";
+    cx.fillText(`中心 ${sim.T[0].toFixed(1)}℃`, cx0, cy0 + 4);
+    cx.fillStyle = "#e8ecf1";
+    cx.fillText(`表面 ${sim.T[N - 1].toFixed(1)}℃`, cx0, cy0 - rad - 10);
+  }
+
+  // 泡の演出
+  cx.strokeStyle = "rgba(230,245,255,0.85)";
+  cx.lineWidth = 1;
+  for (const b of bubbles) {
+    b.y -= 1.6;
+    b.x += (Math.random() - 0.5) * 0.8;
+    b.life -= 0.02;
+    cx.beginPath(); cx.arc(b.x, b.y, 2, 0, Math.PI * 2); cx.stroke();
+  }
+  bubbles = bubbles.filter(b => b.life > 0 && b.y > potY);
+
+  cx.textAlign = "left";
+}
+
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+/* ---------------- グラフ ---------------- */
+function drawDualChart(canvasId, key1, color1, key2, color2, refLine) {
+  const c = document.getElementById(canvasId);
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const H = sim.history;
+  if (H.length < 2) return;
+  let max = refLine ? refLine * 1.15 : 0;
+  for (const p of H) max = Math.max(max, p[key1], key2 ? p[key2] : 0);
+  max = max * 1.05 + 1e-6;
+  const t0 = H[0].t, t1 = H[H.length - 1].t;
+  const span = Math.max(t1 - t0, 60);
+
+  function drawLine(key, color) {
+    g.strokeStyle = color; g.lineWidth = 1.5;
+    g.beginPath();
+    for (let i = 0; i < H.length; i++) {
+      const px = ((H[i].t - t0) / span) * (c.width - 4) + 2;
+      const py = c.height - 3 - (H[i][key] / max) * (c.height - 8);
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.stroke();
+  }
+  drawLine(key1, color1);
+  if (key2) drawLine(key2, color2);
+
+  if (refLine) {
+    const py = c.height - 3 - (refLine / max) * (c.height - 8);
+    g.strokeStyle = "rgba(255,255,255,0.4)";
+    g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(0, py); g.lineTo(c.width, py); g.stroke();
+    g.setLineDash([]);
+  }
+
+  g.fillStyle = "#9fb0c3"; g.font = "9px sans-serif";
+  g.fillText(max >= 100 ? Math.round(max) : max.toFixed(1), 4, 10);
+}
+
+/* ---------------- UI ---------------- */
+function fmtTime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return h > 0 ? `${h}時間${m}分` : m > 0 ? `${m}分${s}秒` : `${s}秒`;
+}
+
+function updateUI() {
+  document.getElementById("stCore").innerHTML = `${sim.T[0].toFixed(1)} <small>℃</small>`;
+  document.getElementById("stSurf").innerHTML = `${sim.T[N - 1].toFixed(1)} <small>℃</small>`;
+  document.getElementById("stTime").textContent = fmtTime(sim.t);
+  document.getElementById("stEta").textContent = sim.reachedAt !== null
+    ? `到達済（${fmtTime(sim.reachedAt)}）` : "加熱中…";
+
+  document.getElementById("stLog").innerHTML = `${sim.logRed.toFixed(2)} <small>log</small>`;
+  const pct = Math.min(100, (sim.logRed / PASTEUR.targetLog) * 100);
+  document.getElementById("pastBar").style.width = `${pct}%`;
+  document.getElementById("stLogEta").textContent = sim.pasteurizedAt !== null
+    ? `到達済（${fmtTime(sim.pasteurizedAt)}）` : `${pct.toFixed(0)}%`;
+
+  const badge = document.getElementById("stateBadge");
+  if (sim.pasteurizedAt !== null) {
+    badge.textContent = "低温殺菌 目安到達";
+    badge.className = "state-badge pasteurized";
+  } else if (sim.reachedAt !== null) {
+    badge.textContent = "目標中心温度に到達";
+    badge.className = "state-badge reached";
+  } else {
+    badge.textContent = "加熱中";
+    badge.className = "state-badge heating";
+  }
+}
+
+/* ---------------- イベントハンドラ ---------------- */
+const foodSelect = document.getElementById("foodType");
+for (const key in FOODS) {
+  const opt = document.createElement("option");
+  opt.value = key;
+  opt.textContent = FOODS[key].name;
+  foodSelect.appendChild(opt);
+}
+foodSelect.value = params.food;
+
+function syncControlsFromParams() {
+  const f = FOODS[params.food];
+  document.getElementById("thickLabel").textContent = f.sizeLabel;
+  const thickness = document.getElementById("thickness");
+  thickness.min = f.thickRange[0];
+  thickness.max = f.thickRange[1];
+  thickness.value = params.thicknessCm;
+  document.getElementById("thicknessVal").textContent = `${params.thicknessCm.toFixed(1)} cm`;
+
+  document.getElementById("initTemp").value = params.initTemp;
+  document.getElementById("initTempVal").textContent = `${params.initTemp} ℃`;
+
+  document.getElementById("targetTemp").value = params.targetTemp;
+  document.getElementById("targetTempVal").textContent = `${params.targetTemp.toFixed(1)} ℃`;
+
+  document.getElementById("waterTemp").value = params.waterTemp;
+  document.getElementById("waterTempVal").textContent = `${params.waterTemp.toFixed(1)} ℃`;
+}
+
+foodSelect.addEventListener("change", e => {
+  applyFood(e.target.value);
+  syncControlsFromParams();
+  reset();
+});
+
+document.getElementById("thickness").addEventListener("input", e => {
+  params.thicknessCm = +e.target.value;
+  document.getElementById("thicknessVal").textContent = `${params.thicknessCm.toFixed(1)} cm`;
+});
+document.getElementById("initTemp").addEventListener("input", e => {
+  params.initTemp = +e.target.value;
+  document.getElementById("initTempVal").textContent = `${params.initTemp} ℃`;
+});
+document.getElementById("targetTemp").addEventListener("input", e => {
+  params.targetTemp = +e.target.value;
+  document.getElementById("targetTempVal").textContent = `${params.targetTemp.toFixed(1)} ℃`;
+});
+document.getElementById("waterTemp").addEventListener("input", e => {
+  params.waterTemp = +e.target.value;
+  document.getElementById("waterTempVal").textContent = `${params.waterTemp.toFixed(1)} ℃`;
+});
+document.getElementById("circulator").addEventListener("change", e => { params.circulator = e.target.value; });
+document.getElementById("speed").addEventListener("change", e => { params.speed = +e.target.value; });
+document.getElementById("btnPause").addEventListener("click", e => {
+  sim.running = !sim.running;
+  e.target.textContent = sim.running ? "⏸ 一時停止" : "▶ 再開";
+});
+document.getElementById("btnReset").addEventListener("click", reset);
+
+/* ---------------- メインループ ---------------- */
+let lastFrame = performance.now();
+function frame(now) {
+  const wall = Math.min((now - lastFrame) / 1000, 0.1);
+  lastFrame = now;
+
+  if (sim.running) {
+    let remain = wall * params.speed;
+    const DT = 1.0; // 物理ステップ [s]（安定性のための上限）
+    while (remain > 0) {
+      const dt = Math.min(DT, remain);
+      step(dt);
+      remain -= dt;
+    }
+    record();
+  }
+
+  draw();
+  updateUI();
+  drawDualChart("chartTemp", "core", "#ff8a5a", "surf", "#5aa9ff", params.targetTemp);
+  drawDualChart("chartLog", "logRed", "#5aa9ff", null, null, PASTEUR.targetLog);
+  requestAnimationFrame(frame);
+}
+
+applyFood(params.food);
+syncControlsFromParams();
+reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
