@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>低温調理 熱モデル シミュレータ</title>
+<style>
+  :root{
+    --bg:#f2f3f5; --card:#fff; --ink:#2f3237; --sub:#7a7f87;
+    --red:#d93025; --blue:#3b6fb5; --green:#1e7a5f; --coral:#d85a30;
+    --band:#d9ede2; --line:#e4e6e9; --dark:#2b2d31;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;
+    padding:18px; font-size:14px;
+  }
+  .card{
+    background:var(--card); border-radius:10px; padding:16px 20px;
+    max-width:980px; margin:0 auto 14px; box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .step-head{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+  .step-badge{background:var(--dark); color:#fff; font-weight:700; font-size:12px;
+    letter-spacing:.15em; padding:4px 10px; border-radius:5px;}
+  .step-title{font-weight:700; font-size:15px;}
+  .btn-eq{margin-left:auto; border:1px solid #ccd0d5; background:#fff; color:var(--ink);
+    border-radius:7px; padding:6px 14px; font-size:12.5px; font-weight:700;
+    cursor:pointer; font-family:inherit;}
+  .btn-eq.on{background:var(--dark); color:#fff; border-color:var(--dark);}
+  .mono{font-family:Consolas,"Roboto Mono",monospace;}
+
+  /* ---- 模式図 + 数式 ---- */
+  .schema-wrap{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;}
+  .schema-svg{flex:1 1 380px; min-width:340px;}
+  .eq-panel{flex:1 1 300px; min-width:280px; font-size:12.5px; line-height:1.9;
+    border-left:1px dashed var(--line); padding-left:18px;}
+  .eq-panel h4{font-size:12.5px; margin:8px 0 2px; color:var(--ink);}
+  .eq-panel h4:first-child{margin-top:0;}
+  .eq-panel code{font-family:Consolas,"Roboto Mono",monospace; font-size:12px; color:#444;
+    display:block; padding-left:8px;}
+  .eq-panel .live{color:var(--red); font-weight:700;}
+
+  /* ---- 入力パネル(横長) ---- */
+  .panel-row{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end;}
+  .field{min-width:110px; flex:1;}
+  .field label{display:block; font-size:11px; color:var(--sub); margin-bottom:4px;}
+  .field select,.field input{width:100%; padding:7px 9px; border:1px solid #ccd0d5;
+    border-radius:7px; font-size:13.5px; background:#fff; color:var(--ink); font-family:inherit;}
+  .field input:focus,.field select:focus{outline:2px solid #9db8dd; border-color:#9db8dd;}
+  .sep{width:1px; align-self:stretch; background:var(--line); margin:0 4px;}
+  .res{min-width:96px;}
+  .res .k{font-size:11px; color:var(--sub);}
+  .res .v{font-size:22px; font-weight:700; font-family:Consolas,monospace; line-height:1.2;}
+  .res .v small{font-size:12px; font-weight:600;}
+  .res .v.red{color:var(--red);}
+  .btn{border:none; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:700;
+    cursor:pointer; font-family:inherit;}
+  .btn-start{background:var(--dark); color:#fff;}
+  .btn-start:disabled{background:#c7cacd; cursor:not-allowed;}
+  .btn-stop{background:#fff; color:#9aa0a6; border:1px solid #d6d9dd;}
+  .btn-stop.enabled{color:var(--ink);}
+
+  /* ---- グラフ + モニタ ---- */
+  .chart-wrap{border:1px solid var(--line); border-radius:8px; padding:6px 6px 2px; background:#fff;}
+  canvas{width:100%; display:block;}
+  .monitor{display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; align-items:center;}
+  .status-line{display:flex; align-items:center; gap:8px; font-weight:700; font-size:14.5px;}
+  .dot{width:11px; height:11px; border-radius:50%; background:#b9bec4; flex:none;}
+  .dot.run{background:var(--red); animation:blink 1.2s infinite;}
+  .dot.done{background:var(--green);}
+  @keyframes blink{50%{opacity:.35;}}
+  .big-timer{font-family:Consolas,monospace; font-weight:700; font-size:44px; letter-spacing:.04em;}
+  .timer-label{font-size:11px; color:var(--sub);}
+  .mv .k{font-size:11px; color:var(--sub);}
+  .mv .v{font-size:26px; font-weight:700; font-family:Consolas,monospace; line-height:1.15;}
+  .mv .v .unit{font-size:13px; font-weight:600;}
+
+  /* ---- 履歴テーブル ---- */
+  #histWrap table{width:100%; border-collapse:collapse;}
+  #histWrap th,#histWrap td{padding:7px 8px; text-align:left; border-bottom:1px solid var(--line);}
+  #histWrap th{color:var(--sub); font-weight:600; font-size:11.5px;}
+  #histWrap td{font-size:12.5px;}
+  #histWrap tr:hover td{background:#f7f8f9;}
+  .hist-del{border:none; background:none; color:var(--sub); cursor:pointer; font-size:13px;}
+  .hist-del:hover{color:var(--red);}
+  .keep-chip{display:inline-block; padding:2px 8px; border-radius:10px; font-weight:700; font-size:11.5px;}
+  .keep-hi{background:var(--band); color:var(--green);}
+  .keep-lo{background:#fbe1de; color:var(--red);}
+
+  /* ---- エラー復帰バナー ---- */
+  .err-banner{
+    max-width:980px; margin:0 auto 14px; background:#fdeceb; border:1px solid #f3b7b0;
+    border-radius:9px; padding:11px 14px; display:flex; align-items:center; gap:12px;
+    font-size:13px; color:#8a2c22;
+  }
+  .err-banner .msg{flex:1; line-height:1.5;}
+  .err-banner button{border:none; border-radius:7px; padding:7px 14px; font-size:12.5px;
+    font-weight:700; cursor:pointer; font-family:inherit;}
+  .err-retry{background:#8a2c22; color:#fff;}
+  .err-close{background:none; color:#8a2c22; padding:7px 8px;}
+  .inline-err{display:flex; align-items:center; gap:10px; color:#8a2c22; font-size:12.5px;}
+  .inline-retry{border:1px solid #e0a49c; background:#fff; color:#8a2c22; border-radius:6px;
+    padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit;}
+</style>
+</head>
+<body>
+
+<div class="err-banner" id="errBanner" style="display:none;">
+  <span class="msg" id="errMsg"></span>
+  <button class="err-retry" id="errRetry">再試行</button>
+  <button class="err-close" id="errClose">✕</button>
+</div>
+
+<!-- ============ STEP 1 : 模式図 (リアルタイム連動) ============ -->
+<div class="card">
+  <div class="step-head">
+    <span class="step-badge">STEP 1</span>
+    <span class="step-title">熱モデル模式図(温度・熱流をリアルタイム表示)</span>
+    <button class="btn-eq" id="btnEq">数式を表示</button>
+  </div>
+  <div class="schema-wrap">
+    <svg class="schema-svg" viewBox="0 0 420 486" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5"
+          orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6"
+            stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <text x="30" y="34" font-size="12" fill="#7a7f87">周囲 T0 = <tspan id="sT0" font-weight="bold">25</tspan> ℃</text>
+
+      <!-- 放熱矢印 (蓋・両壁) -->
+      <path id="arrAmb1" d="M160 88V58" stroke="#d85a30" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+      <path id="arrAmb2" d="M260 88V58" stroke="#d85a30" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+      <path id="arrAmb3" d="M86 200H54"  stroke="#d85a30" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+      <path id="arrAmb4" d="M334 200H366" stroke="#d85a30" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+      <text x="332" y="232" font-size="11.5" fill="#993c1d">q_amb</text>
+      <text x="332" y="247" font-size="11.5" fill="#993c1d"><tspan id="qAmb" font-weight="bold">--</tspan> W</text>
+
+      <!-- 蓋 -->
+      <g id="lidG">
+        <rect x="78" y="92" width="264" height="15" rx="5" fill="#b4b2a9"/>
+        <rect x="192" y="81" width="36" height="8" rx="4" fill="#888780"/>
+        <text x="348" y="104" font-size="11.5" fill="#5f5e5a">蓋</text>
+      </g>
+      <text id="noLidT" x="150" y="104" font-size="11.5" fill="#993c1d" style="display:none;">蓋無し(蒸発・対流で放熱大)</text>
+
+      <!-- 鍋 -->
+      <rect x="88" y="112" width="10" height="272" fill="#b4b2a9"/>
+      <rect x="322" y="112" width="10" height="272" fill="#b4b2a9"/>
+      <rect x="88" y="376" width="244" height="10" rx="3" fill="#b4b2a9"/>
+      <text x="338" y="384" font-size="11.5" fill="#5f5e5a">鍋 C鍋</text>
+
+      <!-- ヒーター (一定出力・ONOFFなし) -->
+      <rect x="118" y="392" width="184" height="11" rx="4" fill="#d93025"/>
+      <path d="M150 390V366" stroke="#d93025" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+      <path d="M205 390V366" stroke="#d93025" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+      <path d="M260 390V366" stroke="#d93025" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+      <text x="308" y="399" font-size="11.5" fill="#d93025">ヒーター</text>
+      <text x="308" y="414" font-size="11.5" fill="#d93025">P=<tspan id="sP" font-weight="bold">30</tspan>W 一定</text>
+      <!-- ヒーター切替目安(実機の三段階出力の参考値) -->
+      <text x="118" y="422" font-size="10" fill="#7a7f87">ヒーター切替目安:</text>
+      <text x="118" y="434" font-size="10" fill="#7a7f87">保温:60W / 弱:115W / 強:175W</text>
+
+      <!-- 湯 -->
+      <rect id="waterRect" x="98" y="118" width="224" height="258" fill="hsl(210,70%,72%)" opacity=".6"/>
+      <text x="112" y="142" font-size="13" font-weight="bold" fill="#0c447c">湯 Tw = <tspan id="sTw">--.-</tspan> ℃</text>
+
+      <!-- 肉 -->
+      <ellipse id="meatShell" cx="205" cy="292" rx="76" ry="52" fill="hsl(210,55%,70%)"/>
+      <circle id="meatCore" cx="205" cy="292" r="22" fill="hsl(210,55%,52%)"/>
+      <text x="148" y="262" font-size="11.5" fill="#4a1b0c">表層 Ts = <tspan id="sTs" font-weight="bold">--.-</tspan> ℃</text>
+      <text x="163" y="336" font-size="11.5" fill="#4a1b0c">中心 Tc = <tspan id="sTc" font-weight="bold">--.-</tspan> ℃</text>
+
+      <!-- 熱流矢印 湯→表層, 表層→中心 -->
+      <path id="arrWs" d="M150 200L178 238" stroke="#993c1d" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+      <text x="120" y="196" font-size="11.5" fill="#993c1d">q_ws <tspan id="qWs" font-weight="bold">--</tspan> W</text>
+      <path id="arrSc" d="M262 274L232 288" stroke="#712b13" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+      <text x="252" y="262" font-size="11.5" fill="#712b13">q_sc <tspan id="qSc" font-weight="bold">--</tspan> W</text>
+
+      <text x="30" y="446" font-size="11.5" fill="#7a7f87">矢印の太さ = 熱流の大きさ / 色 = 温度(青:低温 → 赤:高温)</text>
+      <text x="30" y="466" font-size="11.5" fill="#7a7f87">湯量 Mw = <tspan id="sMw" font-weight="bold" fill="#d93025">--</tspan> L (入力値を反映)</text>
+    </svg>
+
+    <div class="eq-panel" id="eqPanel" style="display:none;">
+      <h4>1. 投入直後の混合(瞬時)</h4>
+      <code>Tw(0) = (Mw·cw·100 + C鍋·T0) / (Mw·cw + C鍋)</code>
+      <h4>2. 熱の出入り(矢印に対応)</h4>
+      <code>q_ws  = UA_ws·(Tw − Ts)</code>
+      <code>q_sc  = UA_sc·(Ts − Tc)</code>
+      <code>q_amb = UA_amb·(Tw − T0)</code>
+      <code>P     = ヒーター出力 (一定, 終了まで)</code>
+      <h4>3. 温度の時間変化(連立ODE)</h4>
+      <code>Cw·dTw/dt = +P − q_ws − q_amb  (Tw≦100)</code>
+      <code>Cs·dTs/dt = +q_ws − q_sc</code>
+      <code>Cc·dTc/dt = +q_sc</code>
+      <h4>4. 係数の定義</h4>
+      <code>Cw = Mw·cw + C鍋</code>
+      <code>Cs = 0.6·Mm·cm / Cc = 0.4·Mm·cm</code>
+      <code>UA_ws = h·A / UA_sc = k·A/L</code>
+      <code>A = 0.08·Mm^(2/3), L = 0.015·(Mm/0.3)^(1/3)</code>
+      <h4>係数値 <span class="live">(現在の条件)</span></h4>
+      <code id="eqCoef">UA_ws=-- UA_sc=-- UA_amb=-- W/K</code>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STEP 2 : 入力パネル(横長) ============ -->
+<div class="card">
+  <div class="step-head">
+    <span class="step-badge">STEP 2</span>
+    <span class="step-title">条件入力</span>
+  </div>
+  <div class="panel-row">
+    <div class="field" style="max-width:90px;">
+      <label>初期温 ℃</label>
+      <input type="number" id="inT0" value="25" min="0" max="45" step="1">
+    </div>
+    <div class="field" style="max-width:110px;">
+      <label>湯量 mL (100℃)</label>
+      <input type="number" id="inWater" value="300" min="300" max="8000" step="50">
+    </div>
+    <div class="field" style="max-width:170px;">
+      <label>材料</label>
+      <select id="inMat">
+        <option value="chicken" selected>鶏むね (目標 63℃)</option>
+        <option value="beef">牛肉 (目標 57℃)</option>
+        <option value="fish">魚肉 (目標 45℃)</option>
+      </select>
+    </div>
+    <div class="field" style="max-width:100px;">
+      <label>グラム数 g</label>
+      <input type="number" id="inMass" value="300" min="50" max="2000" step="50">
+    </div>
+    <div class="field" style="max-width:110px;">
+      <label>ヒーター出力 W (0〜100)</label>
+      <input type="number" id="inPow" value="30" min="0" max="100" step="1">
+    </div>
+    <div class="field" style="max-width:150px;">
+      <label>保温方法</label>
+      <select id="inIns">
+        <option value="3.0" selected>蓋無し</option>
+        <option value="1.0">蓋のみ</option>
+        <option value="0.5">蓋+タオル巻き</option>
+        <option value="0.25">発泡クーラー箱</option>
+      </select>
+    </div>
+    <div class="field" style="max-width:120px;">
+      <label>倍速</label>
+      <select id="inSpeed">
+        <option value="1">×1 (90分)</option>
+        <option value="10">×10 (9分)</option>
+        <option value="60" selected>×60 (90秒)</option>
+        <option value="300">×300 (18秒)</option>
+      </select>
+    </div>
+    <div class="sep"></div>
+    <div class="res">
+      <div class="k">投入直後湯温</div>
+      <div class="v" id="optMix">-- <small>℃</small></div>
+    </div>
+    <div class="res">
+      <div class="k">キープ率予測</div>
+      <div class="v" id="optKeep">-- <small>%</small></div>
+    </div>
+    <div class="sep"></div>
+    <button class="btn btn-start" id="btnStart">調理スタート</button>
+    <button class="btn btn-stop" id="btnStop" disabled>停止</button>
+  </div>
+</div>
+
+<!-- ============ STEP 3 : 時系列グラフ ============ -->
+<div class="card">
+  <div class="step-head">
+    <span class="step-badge">STEP 3</span>
+    <span class="step-title">時系列モニタ(モデル予測表示)</span>
+  </div>
+  <div class="chart-wrap"><canvas id="chart" height="360"></canvas></div>
+  <div class="monitor">
+    <div>
+      <div class="status-line"><span class="dot" id="stDot"></span><span id="stText">待機中 − 条件を確認</span></div>
+      <div class="big-timer" id="timer">90:00</div>
+      <div class="timer-label">保持残り時間</div>
+    </div>
+    <div class="mv"><div class="k">湯温(予測)</div>
+      <div class="v"><span id="valTw">--.-</span><span class="unit">℃</span></div></div>
+    <div class="mv"><div class="k">表層温(予測)</div>
+      <div class="v"><span id="valTs">--.-</span><span class="unit">℃</span></div></div>
+    <div class="mv"><div class="k">肉中心温(予測)</div>
+      <div class="v"><span id="valTc">--.-</span><span class="unit">℃</span></div></div>
+    <div class="mv"><div class="k">キープ率 / 平均湯温</div>
+      <div class="v" style="font-size:20px;"><span id="valKeep">--%</span> / <span id="valAvg">--.-</span><span class="unit">℃</span></div></div>
+  </div>
+</div>
+
+<!-- ============ STEP 4 : 履歴 ============ -->
+<div class="card">
+  <div class="step-head">
+    <span class="step-badge">STEP 4</span>
+    <span class="step-title">保存履歴(完了時に自動保存 / 日付・時刻で管理)</span>
+    <button class="btn-eq" id="btnClearHist">履歴を全削除</button>
+  </div>
+  <div id="histWrap" style="font-size:12.5px;">
+    <div style="color:var(--sub);">まだ保存された記録はありません。調理を最後まで完了すると自動保存されます。</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 物性定数 ============ */
+const CWx=4186, CM=3500, C_POT=400, H_WS=150, K_MEAT=0.45, UA_BASE=0.43;
+const T_HOT=100, DUR=90*60, DT=2, BAND=2.5;
+const TARGETS={chicken:63, beef:57, fish:45};
+
+/* ============ 3ノード熱シミュレーション ============ */
+function makeCoef(MwL, MmG, insF){
+  const Mm=MmG/1000;
+  const A=0.08*Math.pow(Mm,2/3);
+  const L=Math.max(0.008, 0.015*Math.cbrt(Mm/0.3));
+  return {
+    Cw: MwL*CWx + C_POT,
+    Cs: Mm*CM*0.6, Cc: Mm*CM*0.4,
+    UAws: H_WS*A, UAsc: K_MEAT*A/L,
+    UAamb: insF*UA_BASE*Math.pow(MwL,2/3)
+  };
+}
+function simulate(MwL, MmG, T0, insF, target, P){
+  const c=makeCoef(MwL, MmG, insF);
+  let Tw=(MwL*CWx*T_HOT + C_POT*T0)/(MwL*CWx + C_POT), Ts=T0, Tc=T0;
+  const n=Math.floor(DUR/DT)+1;
+  const aTw=new Float32Array(n), aTs=new Float32Array(n), aTc=new Float32Array(n);
+  const aIn=new Uint8Array(n);
+  let score=0, inSec=0, sumTw=0;
+  for(let i=0;i<n;i++){
+    aTw[i]=Tw; aTs[i]=Ts; aTc[i]=Tc;
+    const ib=Math.abs(Tw-target)<=BAND?1:0;
+    aIn[i]=ib; inSec+=ib*DT; sumTw+=Tw*DT;
+    const d=Tw-target; score+=d*d*DT;
+    const qWS=c.UAws*(Tw-Ts), qSC=c.UAsc*(Ts-Tc), qA=c.UAamb*(Tw-T0);
+    Tw+=(P-qWS-qA)*DT/c.Cw;
+    if(Tw>100) Tw=100;               /* 沸騰クランプ */
+    Ts+=(qWS-qSC)*DT/c.Cs; Tc+=qSC*DT/c.Cc;
+  }
+  return {Tw:aTw, Ts:aTs, Tc:aTc, inBand:aIn, coef:c,
+          score, keep:100*inSec/DUR, avgTw:sumTw/DUR, mix:aTw[0]};
+}
+
+/* ============ 状態 ============ */
+const $=id=>document.getElementById(id);
+let pred=null, target=63, T0v=25;
+let running=false, done=false, simT=0, rafId=null, lastTs=0;
+
+const MAT_LABEL={chicken:"鶏むね", beef:"牛肉", fish:"魚肉"};
+const INS_LABEL={"3":"蓋無し","1":"蓋のみ","0.5":"蓋+タオル","0.25":"発泡箱"};
+const LS_KEY_LAST="last_inputs";
+const LS_KEY_HIST="history";
+let historyCache=[];
+
+/* ============ エラー復帰ルート ============ */
+const storageAvailable = (typeof window.storage !== "undefined" && window.storage !== null);
+let lastRetryFn=null;
+
+function showError(msg, retryFn){
+  $("errMsg").textContent=msg;
+  lastRetryFn=retryFn||null;
+  $("errRetry").style.display = retryFn ? "" : "none";
+  $("errBanner").style.display="flex";
+}
+function hideError(){ $("errBanner").style.display="none"; lastRetryFn=null; }
+
+/* 一時的な失敗(ネットワーク瞬断等)を想定し、少し待って自動で1回だけ再試行する */
+async function withRetry(fn, {retries=1, delayMs=500}={}){
+  let lastErr=null;
+  for(let i=0;i<=retries;i++){
+    try{ return await fn(); }
+    catch(e){ lastErr=e; if(i<retries) await new Promise(r=>setTimeout(r,delayMs)); }
+  }
+  throw lastErr;
+}
+
+function readInputs(){
+  return { T0:+$("inT0").value||25, mat:$("inMat").value,
+    water:Math.min(8000, Math.max(300,+$("inWater").value||300)),
+    mass:Math.max(50,+$("inMass").value||300),
+    pow:Math.min(100, Math.max(0,+$("inPow").value||0)),
+    ins:+$("inIns").value, speed:+$("inSpeed").value };
+}
+function recompute(){
+  try{
+    const p=readInputs();
+    target=TARGETS[p.mat]; T0v=p.T0;
+    const MwL=p.water/1000;
+    pred=simulate(MwL, p.mass, p.T0, p.ins, target, p.pow);
+    pred.Mw=MwL;
+    const noLid = p.ins>=2;
+    $("lidG").style.display = noLid ? "none" : "";
+    $("noLidT").style.display = noLid ? "" : "none";
+    $("optMix").innerHTML=pred.mix.toFixed(1)+" <small>℃</small>";
+    $("optKeep").innerHTML=pred.keep.toFixed(0)+" <small>%</small>";
+    $("sMw").textContent=pred.Mw.toFixed(2);
+    $("sT0").textContent=p.T0;
+    $("sP").textContent=p.pow;
+    const c=pred.coef;
+    $("eqCoef").textContent="UA_ws="+c.UAws.toFixed(1)+"  UA_sc="+c.UAsc.toFixed(1)+"  UA_amb="+c.UAamb.toFixed(2)+" W/K";
+    if(!running && !done) simT=0;
+    updateAll();
+    if(lastRetryFn===recompute) hideError();
+  }catch(e){
+    console.error("計算中にエラーが発生しました", e);
+    if(running) stop();
+    showError("計算中にエラーが発生しました。入力値をご確認のうえ再試行してください。", recompute);
+  }
+}
+
+/* ============ 模式図の更新 ============ */
+function tempColor(T, sat, lig){
+  const u=Math.min(1, Math.max(0, (T-20)/80));
+  const h=215 - u*205;              /* 215(青)→10(赤) */
+  return "hsl("+h.toFixed(0)+","+sat+"%,"+lig+"%)";
+}
+function idxAt(t){ return Math.min(pred.Tw.length-1, Math.round(t/DT)); }
+function updateSchema(){
+  if(!pred) return;
+  const i=idxAt(done?DUR:simT);
+  const Tw=pred.Tw[i], Ts=pred.Ts[i], Tc=pred.Tc[i], c=pred.coef;
+  $("waterRect").setAttribute("fill", tempColor(Tw,72,70));
+  $("meatShell").setAttribute("fill", tempColor(Ts,58,68));
+  $("meatCore").setAttribute("fill", tempColor(Tc,58,50));
+  $("sTw").textContent=Tw.toFixed(1);
+  $("sTs").textContent=Ts.toFixed(1);
+  $("sTc").textContent=Tc.toFixed(1);
+  const qWS=c.UAws*(Tw-Ts), qSC=c.UAsc*(Ts-Tc), qA=c.UAamb*(Tw-T0v);
+  $("qWs").textContent=qWS.toFixed(0);
+  $("qSc").textContent=qSC.toFixed(0);
+  $("qAmb").textContent=qA.toFixed(1);
+  const wWS=Math.min(6, 1+Math.sqrt(Math.max(0,qWS))*0.35);
+  const wSC=Math.min(6, 1+Math.sqrt(Math.max(0,qSC))*0.35);
+  const wA =Math.min(5, 0.8+Math.sqrt(Math.max(0,qA))*0.5);
+  $("arrWs").setAttribute("stroke-width", wWS.toFixed(1));
+  $("arrSc").setAttribute("stroke-width", wSC.toFixed(1));
+  ["arrAmb1","arrAmb2","arrAmb3","arrAmb4"].forEach(id=>
+    $(id).setAttribute("stroke-width", wA.toFixed(1)));
+}
+
+/* ============ グラフ描画 ============ */
+const cv=$("chart"), ctx=cv.getContext("2d");
+const M={l:46,r:16,t:26,b:34};
+function draw(){
+  if(!pred) return;
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||900, h=360;
+  cv.width=w*dpr; cv.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const pw=w-M.l-M.r, ph=h-M.t-M.b;
+  const X=t=>M.l+pw*t/DUR, Y=v=>M.t+ph*(1-v/100);
+
+  ctx.fillStyle="#d9ede2";
+  ctx.fillRect(M.l, Y(target+BAND), pw, Y(target-BAND)-Y(target+BAND));
+
+  ctx.strokeStyle="#e4e6e9"; ctx.lineWidth=1;
+  ctx.fillStyle="#9aa0a6"; ctx.font="11px Consolas,monospace";
+  ctx.textAlign="right"; ctx.textBaseline="middle";
+  for(let v=0;v<=100;v+=15){
+    ctx.beginPath(); ctx.moveTo(M.l,Y(v)); ctx.lineTo(w-M.r,Y(v)); ctx.stroke();
+    ctx.fillText(v, M.l-7, Y(v));
+  }
+  ctx.textAlign="center"; ctx.textBaseline="top";
+  for(let t=0;t<=90;t+=15) ctx.fillText(t, X(t*60), h-M.b+7);
+  ctx.textAlign="left"; ctx.fillText("分", w-M.r-14, h-M.b+7);
+
+  const ovh=target+10;
+  ctx.strokeStyle="#d93025"; ctx.setLineDash([5,4]); ctx.lineWidth=1.4;
+  ctx.beginPath(); ctx.moveTo(M.l,Y(ovh)); ctx.lineTo(w-M.r,Y(ovh)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle="#d93025"; ctx.font="bold 11px sans-serif";
+  ctx.fillText("過熱注意 "+ovh+"℃", M.l+8, Y(ovh)-14);
+
+  function curve(arr, color, dash){
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.setLineDash(dash);
+    ctx.beginPath();
+    for(let i=0;i<arr.length;i+=3){
+      const x=X(i*DT), y=Y(arr[i]);
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  curve(pred.Tw, "#3b6fb5", []);
+  curve(pred.Ts, "#d85a30", [3,3]);
+  curve(pred.Tc, "#1e7a5f", [7,5]);
+
+  const cT=done?DUR:simT, i=idxAt(cT);
+  [["#3b6fb5",pred.Tw[i]],["#d85a30",pred.Ts[i]],["#1e7a5f",pred.Tc[i]]].forEach(([col,v])=>{
+    ctx.fillStyle=col; ctx.beginPath(); ctx.arc(X(cT),Y(v),5,0,7); ctx.fill();
+  });
+
+  ctx.font="11.5px sans-serif"; ctx.textBaseline="middle";
+  let lx=Math.max(M.l+8, w-M.r-470), ly=M.t-11;
+  function leg(col,dash,label,wd){
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(lx+22,ly); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=col; ctx.fillText(label, lx+27, ly); lx+=wd;
+  }
+  leg("#3b6fb5",[],"湯温",70);
+  leg("#d85a30",[3,3],"表層温",86);
+  leg("#1e7a5f",[7,5],"肉中心温",102);
+  ctx.fillStyle="#d9ede2"; ctx.fillRect(lx,ly-5,14,10);
+  ctx.fillStyle="#1e7a5f"; ctx.fillText("目標"+target+"±"+BAND+"℃", lx+19, ly);
+}
+
+/* ============ モニタ数値 ============ */
+function fmtTime(s){ s=Math.max(0,Math.round(s));
+  return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); }
+function updateReadouts(){
+  if(!pred) return;
+  const cT=done?DUR:simT, i=idxAt(cT);
+  $("valTw").textContent=pred.Tw[i].toFixed(1);
+  $("valTs").textContent=pred.Ts[i].toFixed(1);
+  $("valTc").textContent=pred.Tc[i].toFixed(1);
+  $("timer").textContent=fmtTime(DUR-cT);
+  let inS=0,sum=0;
+  for(let k=0;k<=i;k++){ inS+=pred.inBand[k]*DT; sum+=pred.Tw[k]*DT; }
+  const el=Math.max(DT,cT);
+  $("valKeep").textContent=(100*inS/el).toFixed(0)+"%";
+  $("valAvg").textContent=(sum/el).toFixed(1);
+}
+function updateAll(){ updateSchema(); updateReadouts(); draw(); }
+
+function setStatus(mode){
+  const d=$("stDot"), t=$("stText");
+  d.className="dot";
+  if(mode==="run"){ d.classList.add("run"); t.textContent="加熱中 − ヒーター通電(一定)"; }
+  else if(mode==="done"){ d.classList.add("done"); t.textContent="完了 − 取り出してください"; }
+  else t.textContent="待機中 − 条件を確認";
+}
+
+/* ============ 実行制御 ============ */
+function loop(ts){
+  if(!running) return;
+  try{
+    if(!lastTs) lastTs=ts;
+    simT += (ts-lastTs)/1000*readInputs().speed; lastTs=ts;
+    if(simT>=DUR){ simT=DUR; finish(); }
+    updateAll();
+    if(running) rafId=requestAnimationFrame(loop);
+  }catch(e){
+    console.error("実行中にエラーが発生しました", e);
+    running=false;
+    cancelAnimationFrame(rafId);
+    setStatus("idle");
+    $("btnStart").disabled=false;
+    $("btnStop").disabled=true; $("btnStop").classList.remove("enabled");
+    showError("実行中にエラーが発生しました。中断しましたので、再試行で最初からやり直せます。", ()=>{ simT=0; done=false; start(); });
+  }
+}
+function start(){
+  hideError();
+  recompute();
+  saveLastInputs();
+  running=true; done=false; simT=0; lastTs=0;
+  setStatus("run");
+  $("btnStart").disabled=true;
+  $("btnStop").disabled=false; $("btnStop").classList.add("enabled");
+  rafId=requestAnimationFrame(loop);
+}
+function finish(){
+  running=false; done=true;
+  setStatus("done");
+  $("btnStart").disabled=false;
+  $("btnStop").disabled=true; $("btnStop").classList.remove("enabled");
+  buzzer();
+  saveHistoryRecord();
+}
+function stop(){
+  running=false; done=false; simT=0;
+  cancelAnimationFrame(rafId);
+  setStatus("idle");
+  $("btnStart").disabled=false;
+  $("btnStop").disabled=true; $("btnStop").classList.remove("enabled");
+  updateAll();
+}
+
+/* ============ ブザー ============ */
+let ac=null;
+function buzzer(){
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    const t0=ac.currentTime;
+    for(let k=0;k<6;k++){
+      const o=ac.createOscillator(), g=ac.createGain();
+      o.type="square"; o.frequency.value=2200;
+      g.gain.setValueAtTime(0.0001,t0+k*0.45);
+      g.gain.exponentialRampToValueAtTime(0.22,t0+k*0.45+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+k*0.45+0.28);
+      o.connect(g).connect(ac.destination);
+      o.start(t0+k*0.45); o.stop(t0+k*0.45+0.3);
+    }
+  }catch(e){}
+}
+
+/* ============ 保存(入力値の記憶 / 完了履歴) ============ */
+async function saveLastInputs(){
+  if(!storageAvailable) return;
+  try{
+    const p=readInputs();
+    await withRetry(()=>window.storage.set(LS_KEY_LAST, JSON.stringify(p), false));
+    if(lastRetryFn===saveLastInputs) hideError();
+  }catch(e){
+    console.error("入力値の保存に失敗", e);
+    showError("入力値の保存に失敗しました(次回起動時に前回値が復元されない可能性があります)。", saveLastInputs);
+  }
+}
+async function loadLastInputs(){
+  if(!storageAvailable) return;
+  try{
+    const r=await withRetry(()=>window.storage.get(LS_KEY_LAST, false));
+    if(!r) return;
+    const p=JSON.parse(r.value);
+    if(p.T0!=null) $("inT0").value=p.T0;
+    if(p.water!=null) $("inWater").value=p.water;
+    if(p.mat!=null) $("inMat").value=p.mat;
+    if(p.mass!=null) $("inMass").value=p.mass;
+    if(p.pow!=null) $("inPow").value=p.pow;
+    if(p.ins!=null) $("inIns").value=p.ins;
+    if(p.speed!=null) $("inSpeed").value=p.speed;
+  }catch(e){
+    /* キー未作成(初回起動)の場合もここに来るため、既定値のまま静かに続行する */
+  }
+}
+
+function fmtDateHour(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  const h=String(d.getHours()).padStart(2,"0");
+  return { date: y+"-"+m+"-"+day, hour: h+"時" };
+}
+async function loadHistory(){
+  if(!storageAvailable){ renderHistory(); return; }
+  $("histWrap").innerHTML = '<div style="color:var(--sub);">読み込み中...</div>';
+  try{
+    const r=await withRetry(()=>window.storage.get(LS_KEY_HIST, false));
+    historyCache = r ? JSON.parse(r.value) : [];
+    renderHistory();
+  }catch(e){
+    /* 未作成キー(初回)は空扱い、それ以外は再読み込み導線を表示 */
+    historyCache=[];
+    renderHistory();
+  }
+}
+async function persistHistory(){
+  if(!storageAvailable) return true;
+  try{
+    await withRetry(()=>window.storage.set(LS_KEY_HIST, JSON.stringify(historyCache), false));
+    if(lastRetryFn) hideError();
+    return true;
+  }catch(e){
+    console.error("履歴の保存に失敗", e);
+    showError("履歴の保存に失敗しました。この記録は保存されていない可能性があります。", persistHistory);
+    return false;
+  }
+}
+async function saveHistoryRecord(){
+  if(!pred) return;
+  const p=readInputs();
+  const dh=fmtDateHour(new Date());
+  const i=pred.Tw.length-1;
+  const record={
+    date:dh.date, hour:dh.hour,
+    mat:p.mat, mass:p.mass, water:p.water, pow:p.pow, ins:p.ins, T0:p.T0,
+    target, mix:+pred.mix.toFixed(1), avgTw:+pred.avgTw.toFixed(1),
+    keep:Math.round(pred.keep), twFinal:+pred.Tw[i].toFixed(1), tcFinal:+pred.Tc[i].toFixed(1)
+  };
+  historyCache.unshift(record);
+  if(historyCache.length>50) historyCache.length=50;
+  const ok = await persistHistory();
+  if(!ok){
+    /* 保存に失敗した場合は表示だけ更新し、バナーの「再試行」から再保存できるようにする */
+    lastRetryFn = ()=>persistHistory();
+  }
+  renderHistory();
+}
+async function deleteHistoryRecord(idx){
+  const removed=historyCache.splice(idx,1)[0];
+  const ok = await persistHistory();
+  if(!ok && removed){ historyCache.splice(idx,0,removed); } /* 失敗時は表示上も元に戻す */
+  renderHistory();
+}
+async function clearHistory(){
+  const backup=historyCache;
+  historyCache=[];
+  const ok = await persistHistory();
+  if(!ok){ historyCache=backup; }
+  renderHistory();
+}
+function renderHistory(){
+  const wrap=$("histWrap");
+  if(!historyCache.length){
+    wrap.innerHTML='<div style="color:var(--sub);">まだ保存された記録はありません。調理を最後まで完了すると自動保存されます。</div>';
+    return;
+  }
+  let html='<table><thead><tr>'+
+    '<th>日付</th><th>時刻</th><th>材料</th><th>g</th><th>湯量mL</th><th>W</th><th>保温</th>'+
+    '<th>目標℃</th><th>投入直後℃</th><th>平均湯温℃</th><th>キープ率</th><th></th>'+
+    '</tr></thead><tbody>';
+  historyCache.forEach((r,idx)=>{
+    const chip = r.keep>=70 ? "keep-hi" : "keep-lo";
+    html += "<tr>"
+      + "<td class='mono'>"+r.date+"</td>"
+      + "<td class='mono'>"+r.hour+"</td>"
+      + "<td>"+(MAT_LABEL[r.mat]||r.mat)+"</td>"
+      + "<td class='mono'>"+r.mass+"</td>"
+      + "<td class='mono'>"+r.water+"</td>"
+      + "<td class='mono'>"+r.pow+"</td>"
+      + "<td>"+(INS_LABEL[String(r.ins)]||r.ins)+"</td>"
+      + "<td class='mono'>"+r.target+"</td>"
+      + "<td class='mono'>"+r.mix+"</td>"
+      + "<td class='mono'>"+r.avgTw+"</td>"
+      + "<td><span class='keep-chip "+chip+"'>"+r.keep+"%</span></td>"
+      + "<td><button class='hist-del' data-idx='"+idx+"' title='削除'>✕</button></td>"
+      + "</tr>";
+  });
+  html += "</tbody></table>";
+  wrap.innerHTML=html;
+  wrap.querySelectorAll(".hist-del").forEach(btn=>{
+    btn.addEventListener("click", ()=> deleteHistoryRecord(+btn.dataset.idx));
+  });
+}
+
+
+["inT0","inWater","inMat","inMass","inPow","inIns"].forEach(id=>{
+  $(id).addEventListener("input", ()=>{
+    if(!running){ done=false; recompute(); }
+    saveLastInputs();
+  });
+});
+$("btnClearHist").addEventListener("click", ()=>{
+  if(confirm("保存した履歴をすべて削除しますか?")) clearHistory();
+});
+$("errRetry").addEventListener("click", ()=>{
+  const fn=lastRetryFn;
+  hideError();
+  if(fn) fn();
+});
+$("errClose").addEventListener("click", hideError);
+$("btnEq").addEventListener("click", ()=>{
+  const p=$("eqPanel"), shown=p.style.display!=="none";
+  p.style.display=shown?"none":"block";
+  $("btnEq").textContent=shown?"数式を表示":"数式を隠す";
+  $("btnEq").classList.toggle("on", !shown);
+});
+$("btnStart").addEventListener("click", ()=>{ if(ac&&ac.state==="suspended")ac.resume(); start(); });
+$("btnStop").addEventListener("click", stop);
+window.addEventListener("resize", draw);
+window.addEventListener("error", (ev)=>{
+  console.error("未処理のエラー", ev.error||ev.message);
+  showError("予期しないエラーが発生しました。再試行するとページの状態を復旧します。", ()=>{ recompute(); });
+});
+
+(async function init(){
+  if(!storageAvailable){
+    showError("この環境では保存機能(前回値の復元・履歴保存)が利用できません。それ以外の機能は通常どおり使えます。", null);
+  }
+  await loadLastInputs();
+  await loadHistory();
+  recompute();
+  setStatus("idle");
+})();
+</script>
+</body>
+</html>
